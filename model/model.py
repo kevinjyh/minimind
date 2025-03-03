@@ -24,10 +24,17 @@ class RMSNorm(torch.nn.Module):
 
 
 def precompute_pos_cis(dim: int, end: int = int(32 * 1024), theta: float = 1e6):
+    # 計算頻率基底 (base frequency)
     freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
-    t = torch.arange(end, device=freqs.device)  # type: ignore
-    freqs = torch.outer(t, freqs).float()  # type: ignore
-    pos_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
+    
+    # 生成位置序列 (0 到 end-1)
+    t = torch.arange(end, device=freqs.device)
+    
+    # 計算外積得到位置-維度頻率矩陣
+    freqs = torch.outer(t, freqs).float()
+    
+    # 轉換為複數形式 (cosθ, sinθ)
+    pos_cis = torch.polar(torch.ones_like(freqs), freqs)  # e^(i·θ)
     return pos_cis
 
 

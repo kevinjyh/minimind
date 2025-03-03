@@ -1,0 +1,135 @@
+## model\LMConfig.py
+
+### MoE，全稱為 **Mixture of Experts (混合專家系統)**
+
+| 屬性 | 值 |
+|------|------|
+| 行數 | 23, 50 |
+| 類型 | 註解 |
+
+#### 定義與說明：
+
+- 在深度學習領域中，`MOE` 核心設計是將神經網路分解為多個「專家」模組，並通過門控機制(gating mechanism)動態組合專家輸出。
+- 主要特點：
+	1. 專家分工：每個前饋網路(FeedForward)作為獨立專家，擅長處理不同模式數據
+	2. 動態路由：通過 `MoEGate` 計算權重，每個 token 選擇 top_k 專家 (由 `num_experts_per_tok` 參數控制)
+	3. 稀疏激活：僅激活部分專家，大幅降低計算量 (如程式碼中 `moe_infer` 的專家快取機制)
+
+#### 運作流程：
+``` python
+def forward(self, x):
+    # 門控選擇專家
+    topk_idx, topk_weight, aux_loss = self.gate(x)  
+    # 分發數據到專家
+    for i, expert in enumerate(self.experts):
+        y[flat_topk_idx == i] = expert(x[flat_topk_idx == i])
+    # 組合專家輸出
+    y = (y.view(*topk_weight.shape, -1) * topk_weight.unsqueeze(-1)).sum(dim=1)
+```
+
+#### 優勢：
+	- 大幅提升模型容量而不顯著增加計算量
+	- 實現條件計算(conditional computation)，動態分配計算資源
+	- 可擴展性強，可並行處理多個專家模組
+應用場景：常用於超大規模語言模型 (如 Google 的 GLaM, Switch Transformer)，當標準前饋網路成為計算瓶頸時，可用 MOE 架構提升效能。
+
+----
+
+## scripts\train_tokenizer.py
+
+### `BPE`（Byte Pair Encoding，位元組對編碼）
+
+| 屬性 | 值 |
+|------|------|
+| 行數 | 31 |
+| 類型 | method |
+
+#### 定義與說明：
+- 參考 `learning-notes\discussions\BPE 演算法.md`
+
+----
+
+## model\model.py
+
+### `RMSNorm` 的全名是 **Root Mean Square Layer Normalization**
+
+| 屬性 | 值 |
+|------|------|
+| 行數 | 16-23 |
+| 類型 | class |
+
+定義與說明：
+
+- 主要功能是進行去均值化的層歸一化操作。
+- 主要作用：
+	1. 去均值化：與傳統 LayerNorm 不同，省略了減去均值的步驟
+	2. 均方根縮放：使用特徵維度的均方根值 (RMS) 進行縮放
+	3. 可學習權重：通過參數 `weight` 保留對特徵維度的自適應調整能力
+	4. 數值穩定：加入微小值 `eps` 防止除以零的情況
+
+優勢在於比標準 LayerNorm 減少約 10-20% 的計算量，同時保持相近的模型表現，常用於大型語言模型的歸一化層設計。
+
+
+### `precompute_pos_cis` 是用於生成「旋轉式位置編碼」(Rotary Position Embedding, RoPE) 的預計算函式
+
+| 屬性 | 值 |
+|------|------|
+| 行數 | 26-31 |
+| 類型 | def |
+
+#### 名稱解析如下：
+- precompute：預先計算
+- pos：位置 (position)
+- cis：複數表示法 (cosθ + i·sinθ)
+
+#### 參數說明：
+- `dim`：每個注意力頭的維度
+- `end`：預處理的最大序列長度 (預設 32K tokens)
+- `theta`：頻率調製係數 (預設 1e6)
+
+#### 數學意義：
+\[ \text{pos\_cis}[m, n] = e^{i \cdot m \theta^{-2n/d}} \]
+其中 \( m \) 為位置，\( n \) 為維度索引
+
+#### 主要作用：
+1. **位置感知編碼**：為每個位置生成獨特的旋轉因子
+2. **相對位置保留**：通過旋轉矩陣保持 token 間的相對位置關係
+3. **高效計算**：預先計算可複用的旋轉係數
+4. **長程衰減**：通過 \( \theta \) 控制高維特徵的衰減速度
+
+後續在注意力機制中會透過 `apply_rotary_emb` 函式，將此複數形式的旋轉編碼應用於 query 和 key 向量，實現位置信息的注入。
+
+
+
+### `apply_rotary_emb` 的作用是將旋轉式位置編碼 (RoPE) 應用於 query (`xq`) 和 key (`xk`) 張量
+
+| 屬性 | 值 |
+|------|------|
+| 行數 | 41-54 |
+| 類型 | def |
+
+#### 名稱解析如下：
+- **apply**：應用
+- **rotary_emb**：旋轉式位置編碼 (Rotary Embedding)
+
+#### 主要步驟：
+1. **複數轉換**：將 `xq` 和 `xk` 的最後兩個維度重塑為複數形式。
+2. **形狀調整**：通過 `unite_shape` 確保 `pos_cis` 的形狀與 `xq` 和 `xk` 相容。
+3. **旋轉操作**：將複數形式的 `xq` 和 `xk` 與 `pos_cis` 相乘，實現旋轉。
+4. **實數轉換**：將旋轉後的複數張量轉換回實數形式。
+
+#### 數學意義：
+\[
+\begin{aligned}
+xq' &= xq \cdot e^{i \theta} \\
+xk' &= xk \cdot e^{i \theta}
+\end{aligned}
+\]
+其中 \( xq \) 和 \( xk \) 是原始的 query 和 key 向量，\( e^{i \theta} \) 是由 `precompute_pos_cis` 預先計算的位置編碼。
+
+#### 作用：
+- **位置信息注入**：將位置信息融入 query 和 key 張量中，使模型具備位置感知能力。
+- **相對位置編碼**：通過旋轉操作，保持 token 間的相對位置關係。
+- **適用於 Transformer**：為 Transformer 模型提供位置編碼，替代傳統的位置編碼方法。
+
+
