@@ -93,42 +93,84 @@ class Attention(nn.Module):
                 pos_cis: torch.Tensor,
                 past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
                 use_cache=False):
-        bsz, seq_len, _ = x.shape
+        """
+        參數說明：
+        x: 輸入張量，形狀為 (batch_size, seq_len, dim)
+        pos_cis: 位置編碼張量，形狀為 (seq_len, dim)
+        past_key_value: 過去的key/value緩存，形狀為 ((batch_size, n_kv_heads, seqlen, head_dim), (batch_size, n_kv_heads, seqlen, head_dim))
+        use_cache: 是否使用過去的key/value緩存
+
+        以下註解說明系對應 `images\LLM-structure.png` 圖片中右側標示為 (a) GQA 的綠色背景區塊的各部位
+        """
+        # 注意：輸入x已經經過前面的RMSNorm處理 (對應圖中最底部的RMSNorm)
+        
+        batch_size, seq_len, dim = x.shape
+        
+        # 線性投影層：將輸入投影到Q、K、V空間 (對應圖中底部的Linear層)
         xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
-        xq = xq.view(bsz, seq_len, self.n_local_heads, self.head_dim)
-        xk = xk.view(bsz, seq_len, self.n_local_kv_heads, self.head_dim)
-        xv = xv.view(bsz, seq_len, self.n_local_kv_heads, self.head_dim)
-
+        
+        # 頭拆分：拆分成多個注意力頭
+        xq = xq.view(batch_size, seq_len, self.n_local_heads, self.head_dim)
+        xk = xk.view(batch_size, seq_len, self.n_local_kv_heads, self.head_dim)
+        xv = xv.view(batch_size, seq_len, self.n_local_kv_heads, self.head_dim)
+        
+        # 應用旋轉位置編碼RoPE (對應圖中Q和K'上方的RoPE框)
         xq, xk = apply_rotary_emb(xq, xk, pos_cis)
-        # kv_cache实现
+        
+        # KV緩存處理 (用於推理加速)
         if past_key_value is not None:
-            xk = torch.cat([past_key_value[0], xk], dim=1)
-            xv = torch.cat([past_key_value[1], xv], dim=1)
-        past_kv = (xk, xv) if use_cache else None
-
-        xq, xk, xv = (
-            xq.transpose(1, 2),
-            repeat_kv(xk, self.n_rep).transpose(1, 2),
-            repeat_kv(xv, self.n_rep).transpose(1, 2)
-        )
+            # 連接過去和當前的key/value
+            key_cache, value_cache = past_key_value
+            xk = torch.cat([key_cache, xk], dim=1)
+            xv = torch.cat([value_cache, xv], dim=1)
+        
+        # 如果Key和Value頭數少於Query頭數，進行重複擴展
+        # (對應GQA的核心概念：grouped-query attention)
+        if self.n_local_kv_heads != self.n_local_heads:
+            # 對K'和V'進行重複 
+            xk = repeat_kv(xk, self.n_rep)  # (bs, seqlen, n_heads, head_dim)
+            xv = repeat_kv(xv, self.n_rep)  # (bs, seqlen, n_heads, head_dim)
+        
+        # 轉置操作，為注意力計算準備形狀
+        q = xq.transpose(1, 2)  # (bs, n_heads, seqlen, head_dim)
+        k = xk.transpose(1, 2)  # (bs, n_heads, seqlen, head_dim)
+        v = xv.transpose(1, 2)  # (bs, n_heads, seqlen, head_dim)
+        
+        # 計算注意力分數 Q·K^T/√d (對應圖中Q和K'之間的矩陣乘法⊗)
+        scores = torch.matmul(q, k.transpose(2, 3)) / math.sqrt(self.head_dim)
+        
+        # 注意力掩碼處理 (對應圖中"mask"部分)
+        # 在自迴歸(autoregressive)模式中，確保每個位置只能看到其前面的位置
         if self.flash and seq_len != 1:
             dropout_p = self.dropout if self.training else 0.0
             output = F.scaled_dot_product_attention(
-                xq, xk, xv,
+                q, k, v,
                 attn_mask=None,
                 dropout_p=dropout_p,
                 is_causal=True
             )
         else:
-            scores = (xq @ xk.transpose(-2, -1)) / math.sqrt(self.head_dim)
             scores += self.mask[:, :, :seq_len, :seq_len]
-            scores = F.softmax(scores.float(), dim=-1).type_as(xq)
+            scores = F.softmax(scores.float(), dim=-1).type_as(q)
             scores = self.attn_dropout(scores)
-            output = scores @ xv
+            output = scores @ v
 
-        output = output.transpose(1, 2).reshape(bsz, seq_len, -1)
+        # 轉置並重塑張量，從多頭形狀轉回序列形狀
+        output = output.transpose(1, 2).contiguous()  # (bs, seqlen, n_heads, head_dim)
+        output = output.view(batch_size, seq_len, -1)
+        # `self.wo(output)` 線性投影層對應於圖中最上方的 Linear 方塊
+        # 它將多頭注意力的結果投影回模型的隱藏維度
+        # ⊕ 代表殘差連接 self.resid_dropout(...)
         output = self.resid_dropout(self.wo(output))
-        return output, past_kv
+        
+        # 注意：這裡返回的output會與原始輸入進行殘差連接 (對應圖中最右側向上的跳過連接)
+        # 殘差連接在MiniMindBlock中完成：output = x + output
+        
+        # 緩存處理
+        if use_cache:
+            return output, (xk, xv)
+        else:
+            return output
 
 
 class FeedForward(nn.Module):
