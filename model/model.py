@@ -174,27 +174,59 @@ class Attention(nn.Module):
 
 
 class FeedForward(nn.Module):
+    """
+    Feed-Forward Network (FFN) 模組
+    對應圖中標示為 "(b) FFN" 的流程圖區塊
+    """
     def __init__(self, config: LMConfig):
         super().__init__()
         if config.hidden_dim is None:
             hidden_dim = 4 * config.dim
             hidden_dim = int(2 * hidden_dim / 3)
             config.hidden_dim = config.multiple_of * ((hidden_dim + config.multiple_of - 1) // config.multiple_of)
-        self.w1 = nn.Linear(config.dim, config.hidden_dim, bias=False)
+        # 對應圖中底部兩個並行的 Linear 層
+        self.w1 = nn.Linear(config.dim, config.hidden_dim, bias=False)  # 左側 Linear 層
+        self.w3 = nn.Linear(config.dim, config.hidden_dim, bias=False)  # 右側 Linear 層
+        
+        # 對應圖中中間的 Linear 層
         self.w2 = nn.Linear(config.hidden_dim, config.dim, bias=False)
-        self.w3 = nn.Linear(config.dim, config.hidden_dim, bias=False)
+        
+        # 對應圖中的 Dropout 層
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x):
-        return self.dropout(self.w2(F.silu(self.w1(x)) * self.w3(x)))
+        """
+        FFN 前向傳播流程
+        注意：輸入 x 已經過 RMSNorm 處理 (對應圖中底部的 RMSNorm)
+        """
+        # 1. 並行處理兩個線性層
+        hidden1 = self.w1(x)  # 左側路徑
+        hidden3 = self.w3(x)  # 右側路徑
+        
+        # 2. 應用 SiLU 激活函數 (對應圖中的 SiLU 黃色方塊)
+        hidden1_activated = F.silu(hidden1)
+        
+        # 3. 點乘操作 (對應圖中的 ⊙ 符號)
+        hidden = hidden1_activated * hidden3
+        
+        # 4. 通過第二個線性層 (對應圖中中間的 Linear 層)
+        output = self.w2(hidden)
+        
+        # 5. 應用 Dropout (對應圖中的 Dropout 粉色方塊)
+        output = self.dropout(output)
+        
+        # 注意：殘差連接 (對應圖中最上方的 ⊕ 符號) 在 MiniMindBlock 中實現
+        # 即 output = x + ffn_output
+        
+        return output
 
 
 class MoEGate(nn.Module):
     def __init__(self, config: LMConfig):
         super().__init__()
         self.config = config
-        self.top_k = config.num_experts_per_tok
-        self.n_routed_experts = config.n_routed_experts
+        self.top_k = config.num_experts_per_tok  # 每個token選擇的專家數量
+        self.n_routed_experts = config.n_routed_experts  # 可路由專家的總數
 
         self.scoring_func = config.scoring_func
         self.alpha = config.aux_loss_alpha
@@ -202,7 +234,7 @@ class MoEGate(nn.Module):
 
         self.norm_topk_prob = config.norm_topk_prob
         self.gating_dim = config.dim
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, self.gating_dim)))
+        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, self.gating_dim)))  # 路由權重
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
@@ -212,38 +244,39 @@ class MoEGate(nn.Module):
     def forward(self, hidden_states):
         bsz, seq_len, h = hidden_states.shape
         hidden_states = hidden_states.view(-1, h)
-        logits = F.linear(hidden_states, self.weight, None)
+        # 計算每個token應該被哪些專家處理
+        logits = F.linear(hidden_states, self.weight, None)  # 計算路由分數
         if self.scoring_func == 'softmax':
-            scores = logits.softmax(dim=-1)
+            scores = logits.softmax(dim=-1)  # 使用softmax計算每個專家的概率
         else:
             raise NotImplementedError(f'insupportable scoring function for MoE gating: {self.scoring_func}')
 
-        topk_weight, topk_idx = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
+        topk_weight, topk_idx = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)  # 選擇每個token的topk專家
 
         if self.top_k > 1 and self.norm_topk_prob:
-            denominator = topk_weight.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weight = topk_weight / denominator
+            denominator = topk_weight.sum(dim=-1, keepdim=True) + 1e-20  # 分母
+            topk_weight = topk_weight / denominator  # 歸一化
 
         if self.training and self.alpha > 0.0:
-            scores_for_aux = scores
-            aux_topk = self.top_k
-            topk_idx_for_aux_loss = topk_idx.view(bsz, -1)
+            scores_for_aux = scores  # 輔助損失的得分
+            aux_topk = self.top_k  # 輔助損失的專家數量
+            topk_idx_for_aux_loss = topk_idx.view(bsz, -1)  # 輔助損失的專家索引
             if self.seq_aux:
-                scores_for_seq_aux = scores_for_aux.view(bsz, seq_len, -1)
-                ce = torch.zeros(bsz, self.n_routed_experts, device=hidden_states.device)
+                scores_for_seq_aux = scores_for_aux.view(bsz, seq_len, -1)  # 輔助損失的得分
+                ce = torch.zeros(bsz, self.n_routed_experts, device=hidden_states.device)  # 輔助損失的交叉熵
                 ce.scatter_add_(1, topk_idx_for_aux_loss,
                                 torch.ones(bsz, seq_len * aux_topk, device=hidden_states.device)).div_(
-                    seq_len * aux_topk / self.n_routed_experts)
-                aux_loss = (ce * scores_for_seq_aux.mean(dim=1)).sum(dim=1).mean() * self.alpha
+                    seq_len * aux_topk / self.n_routed_experts)  # 輔助損失的交叉熵
+                aux_loss = (ce * scores_for_seq_aux.mean(dim=1)).sum(dim=1).mean() * self.alpha  # 輔助損失
             else:
-                mask_ce = F.one_hot(topk_idx_for_aux_loss.view(-1), num_classes=self.n_routed_experts)
-                ce = mask_ce.float().mean(0)
-                Pi = scores_for_aux.mean(0)
-                fi = ce * self.n_routed_experts
-                aux_loss = (Pi * fi).sum() * self.alpha
+                mask_ce = F.one_hot(topk_idx_for_aux_loss.view(-1), num_classes=self.n_routed_experts)  # 輔助損失的掩碼
+                ce = mask_ce.float().mean(0)  # 輔助損失的交叉熵
+                Pi = scores_for_aux.mean(0)  # 輔助損失的平均得分
+                fi = ce * self.n_routed_experts  # 輔助損失的交叉熵
+                aux_loss = (Pi * fi).sum() * self.alpha  # 輔助損失
         else:
-            aux_loss = 0
-        return topk_idx, topk_weight, aux_loss
+            aux_loss = 0  # 如果不在訓練模式下，輔助損失為0
+        return topk_idx, topk_weight, aux_loss  # 返回專家索引、專家權重和輔助損失
 
 
 class MOEFeedForward(nn.Module):
