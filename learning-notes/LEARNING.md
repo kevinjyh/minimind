@@ -101,14 +101,13 @@ MiniMind是一個極小型語言模型專案，其核心理念是"大道至簡"�
 - `scripts/web_demo.py` - WebUI演示界面
 
 ### 2. 模型架構
-- `model/model.py` - 基礎模型架構
-- `model/model_moe.py` - 混合專家模型架構
-- `model/tokenizer.py` - 分詞器實現
+- `model/model.py` - 基礎模型架構（含 RMSNorm、Attention、FeedForward 和 MoE 實現）
+- ~~`dataset/tokenize.py` - 分詞處理相關代碼~~
 
 ### 3. 基礎訓練流程
 - `train_pretrain.py` - 預訓練實現
 - `train_full_sft.py` - 監督微調實現
-- `dataset/dataloader.py` - 數據載入與處理
+- `model\dataset.py` - 數據載入與處理
 
 ### 4. 進階訓練技術
 - `model/model_lora.py` - LoRA模型架構
