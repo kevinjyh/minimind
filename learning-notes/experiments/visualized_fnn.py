@@ -8,6 +8,7 @@ import datetime
 import traceback
 from moe_implementation import SimplifiedMoE
 import os
+from torchviz import make_dot
 
 # 設置日誌輸出
 class Logger:
@@ -243,6 +244,22 @@ def run_demo():
     fnn = VisualizedFeedForward(d_model=4, d_ff=8)
     fnn_output = fnn(x)
     
+    # 生成網絡結構圖
+    output = fnn(x[0:1, 0:1])  # 使用單個樣本簡化可視化
+    dot = make_dot(output, params=dict(fnn.named_parameters()))
+    
+    # 設定保存路徑
+    save_dir = os.path.dirname(os.path.abspath(__file__))
+    save_path = os.path.join(save_dir, "visualized_fnn")
+    
+    # 保存圖像並處理可能異常
+    try:
+        dot.render(save_path, format="png", cleanup=True)
+        print(f"\n網絡結構圖已保存至: {save_path}.png")
+    except Exception as e:
+        print(f"\n生成網絡圖失敗: {str(e)}")
+        print("請確認已安裝 Graphviz 並將其加入系統 PATH")
+
     # 比較 FNN 和 MoE
     compare_fnn_moe()
 
