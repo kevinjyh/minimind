@@ -12,7 +12,7 @@ import os
 class Logger:
     def __init__(self, file_path):
         self.terminal = sys.stdout
-        self.log_file = open(file_path, 'a', encoding='utf-8')
+        self.log_file = open(file_path, 'w', encoding='utf-8')
         # 寫入開頭的分割線和時間戳記
         self.log_file.write("="*50 + "\n")
         self.log_file.write(f"日誌開始時間: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")

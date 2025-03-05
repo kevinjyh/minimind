@@ -13,7 +13,7 @@ import os
 class Logger:
     def __init__(self, file_path):
         self.terminal = sys.stdout
-        self.log_file = open(file_path, 'a', encoding='utf-8')
+        self.log_file = open(file_path, 'w', encoding='utf-8')
         # 寫入開頭的分割線和時間戳記
         self.log_file.write("="*50 + "\n")
         self.log_file.write(f"日誌開始時間: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -48,8 +48,8 @@ class ErrorLogger:
 
 # 設置日誌
 log_dir = os.path.dirname(os.path.abspath(__file__))
-sys.stdout = Logger(os.path.join(log_dir, "visualized-fnn.log"))
-sys.stderr = ErrorLogger(os.path.join(log_dir, "visualized-fnn.log"))
+sys.stdout = Logger(os.path.join(log_dir, "visualized_fnn.log"))
+sys.stderr = ErrorLogger(os.path.join(log_dir, "visualized_fnn.log"))
 
 # 捕獲未處理的異常並記錄
 def handle_exception(exc_type, exc_value, exc_traceback):

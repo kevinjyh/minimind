@@ -1,4 +1,13 @@
-/model/__pycache__
+# 忽略所有 Python 緩存目錄
+__pycache__/
+*.py[cod]
+**/__pycache__/*
+**/*.py[cod]
+
+# 忽略所有 Python 虛擬環境
+.venv/
+venv/
+
 /dataset
 /out
 poetry.lock
