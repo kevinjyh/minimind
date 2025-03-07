@@ -114,7 +114,7 @@ class GQAProjection(nn.Module):
             sys.stdout.write(f"壓縮率: {self.n_query_heads / self.n_kv_heads}x\n\n")
             
             sys.stdout.write(f"輸入形狀: {x.shape}\n")
-            sys.stdout.write(f"示例輸入向量 (截取): {x[0, 0, :10].detach().numpy().round(2)}...\n")
+            sys.stdout.write(f"示例輸入向量 (截取): {x[0, 0, :21].detach().numpy().round(2)}...\n")
         
         # 應用投影
         q = self.q_proj(x)  # [batch_size, seq_len, d_model]
@@ -127,7 +127,7 @@ class GQAProjection(nn.Module):
             sys.stdout.write(f"K投影形狀: {k.shape}\n")
             sys.stdout.write(f"V投影形狀: {v.shape}\n")
             
-            sys.stdout.write(f"\nQ投影後 (截取): {q[0, 0, :10].detach().numpy().round(2)}...\n")
+            sys.stdout.write(f"\nQ投影後 (截取): {q[0, 0, :21].detach().numpy().round(2)}...\n")
             sys.stdout.write(f"K投影後 (全部): {k[0, 0].detach().numpy().round(2)}\n")
             
             # 展示投影矩陣的壓縮效果

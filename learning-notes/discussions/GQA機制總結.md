@@ -86,3 +86,41 @@ Query的多樣性直接影響模型尋找不同類型關係的能力，而Key和
 |多查詢單鍵值注意力 (MQA)|638,976 (63.9%)|196,608 (87.5%)|-2~4%|
 
 這種設計展示了深度學習中重要的思想：不是所有參數都有相同的重要性，針對架構中的非對稱性進行有針對性的優化可以帶來顯著的效率提升。
+
+## 8. 技術實現問答集
+
+### Q: GQA 如何通過 `torch.view()` 實現 K/V 頭數壓縮？
+**A**: 實際壓縮不是由 `torch.view()` 實現的，而是發生在線性投影層。壓縮過程如下：
+1. 線性投影層 `nn.Linear(dim, n_kv_heads * head_dim)` 進行實際數據壓縮
+2. `torch.view()` 僅負責維度重塑，不改變數據內容
+3. 例如，當 Q 頭數=8，K/V 頭數=2 時，壓縮率為 4:1
+
+### Q: 線性投影層如何實現維度壓縮？
+**A**: 線性投影層透過權重矩陣 W 實現壓縮：
+1. 權重矩陣 `W_k` 形狀為 `[n_kv_heads*head_dim, dim]`
+2. 矩陣乘法 `x @ W_k.T` 將 `dim` 維度壓縮到 `n_kv_heads*head_dim`
+3. 這種壓縮是學習得到的，非簡單截斷
+
+### Q: GQA 的壓縮機制在代碼中具體體現在哪裡？
+**A**: 
+```python
+# 線性投影層實現 K/V 壓縮
+self.wk = nn.Linear(args.dim, self.n_kv_heads * self.head_dim, bias=False)
+self.wv = nn.Linear(args.dim, self.n_kv_heads * self.head_dim, bias=False)
+
+# 前向傳播中執行實際壓縮
+xk = self.wk(x)  # 壓縮發生在此處
+xv = self.wv(x)  # 壓縮發生在此處
+```
+
+### Q: 線性投影層 `nn.Linear` 的權重如何初始化和更新？
+**A**: 權重參數的生命週期如下：
+1. **初始化**：模型創建時隨機初始化，使用 Kaiming 均勻分布
+2. **前向傳播**：使用當前權重進行線性變換 `x @ W.T`
+3. **反向傳播**：計算梯度 `∂L/∂W` 並透過優化器更新權重
+4. 整個過程是延遲計算 (lazy evaluation)，推理時使用訓練好的壓縮權重
+
+### Q: Kaiming 初始化的命名由來是什麼？
+**A**: Kaiming 初始化是以其發明者何愷明 (Kaiming He) 命名的初始化方法，他是 Facebook AI Research 的研究員。該方法於2015年在論文《Delving Deep into Rectifiers》中提出，專為解決 ReLU 激活函數的梯度問題而設計，已成為深度學習中的標準初始化方法。
+
+
