@@ -117,9 +117,6 @@ def init_distributed_mode():
 # 這段源碼檔的核心目的是對 MiniMindLM 模型進行預訓練，並使用 Distributed Data Parallel (DDP) 進行分佈式訓練。
 # 以下是對源碼檔的詳細解釋：
 
-# 1. 導入必要的庫
-# 2. 定義 Logger 函數，用於打印訊息
-# 3. 定義 get_lr 函數，用於計算學習率
 # torchrun --nproc_per_node 2 1-pretrain.py
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MiniMind Pretraining")
