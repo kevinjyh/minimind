@@ -39,7 +39,9 @@ dependencies = [
     "torchvision (==0.17.2)",
     "torchinfo (>=1.8.0,<2.0.0)",
     "graphviz (>=0.20.3,<0.21.0)",
-    "torchviz (>=0.0.3,<0.0.4)"
+    "torchviz (>=0.0.3,<0.0.4)",
+    "seaborn (>=0.13.2,<0.14.0)",
+    "pytest (>=8.3.5,<9.0.0)"
 ]
 
 [tool.poetry]
