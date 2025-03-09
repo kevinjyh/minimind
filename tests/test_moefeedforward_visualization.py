@@ -1,0 +1,296 @@
+import pytest
+import torch
+import torch.nn as nn
+import sys
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+from typing import Tuple, List, Optional
+
+# 添加模型目錄到路徑中
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from model.LMConfig import LMConfig
+from model.model import MOEFeedForward, MoEGate
+
+
+class TestMOEFeedForwardVisualization:
+    """MOEFeedForward類的可視化測試，幫助理解專家選擇和貢獻"""
+    
+    @pytest.fixture
+    def basic_config(self):
+        """基本測試配置"""
+        return LMConfig(
+            dim=512,
+            n_layers=8,
+            n_heads=8,
+            hidden_dim=1024,
+            use_moe=True,
+            num_experts_per_tok=2,
+            n_routed_experts=8,  # 使用8個專家以便於觀察模式
+            n_shared_experts=True,
+            aux_loss_alpha=0.1,
+            seq_aux=True,
+            norm_topk_prob=True
+        )
+    
+    def visualize_expert_distribution(self, expert_indices, n_experts, save_path=None):
+        """可視化專家選擇分佈"""
+        counts = torch.bincount(expert_indices.flatten(), minlength=n_experts)
+        expert_usage = counts.float() / counts.sum()
+        
+        plt.figure(figsize=(10, 6))
+        plt.bar(range(n_experts), expert_usage.cpu().numpy())
+        plt.xlabel('專家索引')
+        plt.ylabel('選擇頻率')
+        plt.title('專家選擇分佈')
+        plt.xticks(range(n_experts))
+        plt.grid(axis='y', linestyle='--', alpha=0.7)
+        
+        if save_path:
+            plt.savefig(save_path)
+            plt.close()
+        else:
+            plt.show()
+    
+    def visualize_expert_weights(self, expert_indices, expert_weights, n_experts, save_path=None):
+        """可視化專家權重分佈"""
+        # 將權重按專家分組
+        expert_total_weights = torch.zeros(n_experts, device=expert_weights.device)
+        for i in range(n_experts):
+            mask = (expert_indices == i)
+            if mask.any():
+                expert_total_weights[i] = expert_weights[mask].sum()
+        
+        # 正規化權重
+        expert_total_weights = expert_total_weights / expert_total_weights.sum()
+        
+        plt.figure(figsize=(10, 6))
+        plt.bar(range(n_experts), expert_total_weights.cpu().numpy())
+        plt.xlabel('專家索引')
+        plt.ylabel('權重比例')
+        plt.title('專家權重分佈')
+        plt.xticks(range(n_experts))
+        plt.grid(axis='y', linestyle='--', alpha=0.7)
+        
+        if save_path:
+            plt.savefig(save_path)
+            plt.close()
+        else:
+            plt.show()
+    
+    @pytest.mark.skip(reason="這是一個可視化測試，通常不在CI中運行")
+    def test_visualize_expert_selection(self, basic_config):
+        """測試並可視化專家選擇過程"""
+        moe_ff = MOEFeedForward(basic_config)
+        moe_ff.train()  # 設置為訓練模式
+        
+        # 創建輸入張量 [batch_size, seq_len, dim]
+        batch_size, seq_len = 10, 20  # 使用較大的批次以獲得更好的統計結果
+        x = torch.randn(batch_size, seq_len, basic_config.dim)
+        
+        # 獲取門控機制的輸出
+        with torch.no_grad():
+            topk_idx, topk_weight, _ = moe_ff.gate(x)
+        
+        # 可視化專家選擇分佈
+        flat_topk_idx = topk_idx.view(-1)
+        self.visualize_expert_distribution(
+            flat_topk_idx, 
+            basic_config.n_routed_experts,
+            save_path="expert_selection_distribution.png"
+        )
+        
+        # 可視化專家權重分佈
+        flat_topk_weight = topk_weight.view(-1)
+        self.visualize_expert_weights(
+            flat_topk_idx,
+            flat_topk_weight,
+            basic_config.n_routed_experts,
+            save_path="expert_weight_distribution.png"
+        )
+    
+    @pytest.mark.skip(reason="這是一個可視化測試，通常不在CI中運行")
+    def test_visualize_expert_capacity(self, basic_config):
+        """測試並可視化專家容量和負載"""
+        # 創建多個不同配置的MoE模型
+        configs = []
+        expert_counts = [4, 8, 16]
+        experts_per_tok = [1, 2, 4]
+        
+        results = {}
+        
+        for n_experts in expert_counts:
+            for n_per_tok in experts_per_tok:
+                if n_per_tok > n_experts:
+                    continue  # 跳過無效配置
+                    
+                config = LMConfig(
+                    dim=512,
+                    n_layers=8,
+                    n_heads=8,
+                    hidden_dim=1024,
+                    use_moe=True,
+                    num_experts_per_tok=n_per_tok,
+                    n_routed_experts=n_experts,
+                    n_shared_experts=True,
+                    aux_loss_alpha=0.1,
+                    seq_aux=True,
+                    norm_topk_prob=True
+                )
+                
+                moe_ff = MOEFeedForward(config)
+                moe_ff.train()
+                
+                # 創建輸入張量 [batch_size, seq_len, dim]
+                batch_size, seq_len = 10, 20
+                x = torch.randn(batch_size, seq_len, config.dim)
+                
+                # 獲取門控機制的輸出
+                with torch.no_grad():
+                    topk_idx, _, aux_loss = moe_ff.gate(x)
+                
+                # 計算每個專家處理的標記數量
+                token_counts = torch.bincount(
+                    topk_idx.view(-1), 
+                    minlength=config.n_routed_experts
+                )
+                
+                # 計算專家負載標準差（負載均衡度量）
+                std_load = token_counts.float().std().item()
+                max_load = token_counts.max().item()
+                min_load = token_counts.min().item()
+                
+                # 存儲結果
+                key = f"E{n_experts}_T{n_per_tok}"
+                results[key] = {
+                    "std": std_load,
+                    "max": max_load,
+                    "min": min_load,
+                    "aux_loss": aux_loss.item() if isinstance(aux_loss, torch.Tensor) else aux_loss,
+                    "token_counts": token_counts.cpu().numpy()
+                }
+        
+        # 可視化專家負載均衡
+        fig, axes = plt.subplots(len(expert_counts), len(experts_per_tok), figsize=(15, 10))
+        fig.suptitle('專家負載分佈 (不同專家數量和每個標記選擇的專家數)')
+        
+        for i, n_experts in enumerate(expert_counts):
+            for j, n_per_tok in enumerate(experts_per_tok):
+                if n_per_tok > n_experts:
+                    continue  # 跳過無效配置
+                    
+                key = f"E{n_experts}_T{n_per_tok}"
+                if key in results:
+                    if len(expert_counts) > 1 and len(experts_per_tok) > 1:
+                        ax = axes[i, j]
+                    elif len(expert_counts) > 1:
+                        ax = axes[i]
+                    elif len(experts_per_tok) > 1:
+                        ax = axes[j]
+                    else:
+                        ax = axes
+                    
+                    token_counts = results[key]["token_counts"]
+                    ax.bar(range(len(token_counts)), token_counts)
+                    ax.set_title(f'E={n_experts}, T={n_per_tok}\nSTD={results[key]["std"]:.2f}')
+                    ax.set_xlabel('專家索引')
+                    ax.set_ylabel('處理標記數')
+                    ax.grid(axis='y', linestyle='--', alpha=0.7)
+        
+        plt.tight_layout()
+        plt.savefig("expert_load_distribution.png")
+        plt.close()
+        
+        # 輸出結果摘要
+        print("專家負載均衡測試結果：")
+        for key, data in results.items():
+            print(f"{key}: STD={data['std']:.2f}, MAX={data['max']}, MIN={data['min']}, AUX_LOSS={data['aux_loss']:.4f}")
+    
+    @pytest.mark.skip(reason="這是一個可視化測試，通常不在CI中運行")
+    def test_visualize_inference_optimization(self, basic_config):
+        """測試並可視化推理優化對性能的影響"""
+        moe_ff = MOEFeedForward(basic_config)
+        moe_ff.eval()  # 設置為評估模式
+        
+        # 創建不同大小的輸入張量測試性能
+        batch_sizes = [1, 2, 4, 8, 16]
+        seq_lens = [10, 20, 40, 80]
+        
+        results = {}
+        
+        for batch_size in batch_sizes:
+            for seq_len in seq_lens:
+                key = f"B{batch_size}_S{seq_len}"
+                results[key] = {"vanilla_time": 0, "optimized_time": 0}
+                
+                # 創建輸入
+                x = torch.randn(batch_size, seq_len, basic_config.dim)
+                
+                # 測試使用標準前向傳播的時間
+                start_time = torch.cuda.Event(enable_timing=True)
+                end_time = torch.cuda.Event(enable_timing=True)
+                
+                with torch.no_grad():
+                    # 準備
+                    torch.cuda.synchronize()
+                    start_time.record()
+                    
+                    # 運行多次以獲得更可靠的時間測量
+                    for _ in range(10):
+                        topk_idx, topk_weight, _ = moe_ff.gate(x)
+                        output = moe_ff(x)
+                    
+                    # 記錄時間
+                    end_time.record()
+                    torch.cuda.synchronize()
+                    
+                    results[key]["vanilla_time"] = start_time.elapsed_time(end_time) / 10
+                
+                # 在實際推理優化測試中，我們將使用相同的方法，但因為代碼中已包含優化，
+                # 所以這裡只是重複執行作為比較
+                x_flat = x.view(-1, x.shape[-1])
+                with torch.no_grad():
+                    topk_idx, topk_weight, _ = moe_ff.gate(x)
+                    flat_topk_idx = topk_idx.view(-1)
+                    flat_topk_weight = topk_weight.view(-1, 1)
+                    
+                    # 準備
+                    torch.cuda.synchronize()
+                    start_time.record()
+                    
+                    # 直接調用優化的推理方法
+                    for _ in range(10):
+                        output = moe_ff.moe_infer(x_flat, flat_topk_idx, flat_topk_weight)
+                    
+                    # 記錄時間
+                    end_time.record()
+                    torch.cuda.synchronize()
+                    
+                    results[key]["optimized_time"] = start_time.elapsed_time(end_time) / 10
+        
+        # 可視化結果
+        fig, ax = plt.subplots(figsize=(12, 8))
+        x = np.arange(len(results))
+        width = 0.35
+        
+        vanilla_times = [results[key]["vanilla_time"] for key in results]
+        optimized_times = [results[key]["optimized_time"] for key in results]
+        
+        rects1 = ax.bar(x - width/2, vanilla_times, width, label='標準推理')
+        rects2 = ax.bar(x + width/2, optimized_times, width, label='優化推理')
+        
+        ax.set_ylabel('執行時間 (ms)')
+        ax.set_title('不同批次大小和序列長度的推理性能比較')
+        ax.set_xticks(x)
+        ax.set_xticklabels(list(results.keys()))
+        ax.legend()
+        
+        plt.tight_layout()
+        plt.savefig("inference_optimization_comparison.png")
+        plt.close()
+        
+        # 輸出結果摘要
+        print("推理優化測試結果：")
+        for key, data in results.items():
+            speedup = data["vanilla_time"] / data["optimized_time"] if data["optimized_time"] > 0 else float('inf')
+            print(f"{key}: 標準={data['vanilla_time']:.2f}ms, 優化={data['optimized_time']:.2f}ms, 加速比={speedup:.2f}x") 
