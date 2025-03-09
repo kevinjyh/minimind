@@ -4,6 +4,38 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import sys
 import os
+import matplotlib as mpl
+
+# 設置 Matplotlib 支持中文顯示
+# 方法1：使用系統中已有的中文字體
+try:
+    # 嘗試使用不同的中文字體，根據操作系統可用性
+    if sys.platform.startswith('win'):  # Windows
+        font_list = ['Microsoft YaHei', 'SimHei', 'SimSun']
+    elif sys.platform.startswith('darwin'):  # macOS
+        font_list = ['PingFang SC', 'Heiti SC', 'STHeiti']
+    else:  # Linux 或其他
+        font_list = ['Noto Sans CJK TC', 'Noto Sans CJK SC', 'WenQuanYi Micro Hei']
+    
+    # 嘗試設置字體，直到找到可用的
+    font_found = False
+    for font in font_list:
+        try:
+            plt.rcParams['font.sans-serif'] = [font, 'DejaVu Sans']
+            plt.rcParams['axes.unicode_minus'] = False  # 正確顯示負號
+            # 測試字體是否可用
+            mpl.font_manager.findfont(font)
+            font_found = True
+            print(f"使用字體: {font}")
+            break
+        except:
+            continue
+    
+    if not font_found:
+        print("警告: 未找到支持中文的字體，圖表中的中文可能無法正確顯示")
+except Exception as e:
+    print(f"設置字體時出錯: {e}")
+    print("圖表中的中文可能無法正確顯示")
 
 # 確保可以導入模型模塊
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -194,18 +226,24 @@ def demo_multi_head_attention():
 
 if __name__ == "__main__":
     print("Attention可視化工具")
-    print("選擇要運行的演示：")
-    print("1. 因果掩碼效果演示")
-    print("2. 主題關注模式演示")
-    print("3. 多頭注意力機制演示")
     
-    choice = input("請輸入選項（1-3）：")
-    
-    if choice == "1":
-        demo_causal_mask()
-    elif choice == "2":
-        demo_topic_attention()
-    elif choice == "3":
-        demo_multi_head_attention()
-    else:
-        print("無效選項！請輸入1-3之間的數字。") 
+    while True:
+        print("選擇要運行的演示：")
+        print("1. 因果掩碼效果演示")
+        print("2. 主題關注模式演示")
+        print("3. 多頭注意力機制演示")
+        print("q. 退出")
+        
+        choice = input("請輸入選項（1-3 或 q）：")
+        
+        if choice == "1":
+            demo_causal_mask()
+        elif choice == "2":
+            demo_topic_attention()
+        elif choice == "3":
+            demo_multi_head_attention()
+        elif choice.lower() == "q":
+            print("退出程序。")
+            break
+        else:
+            print("無效選項！請輸入1-3之間的數字或 q 退出。") 
