@@ -5,6 +5,7 @@ import sys
 import os
 import math
 from torch.nn import functional as F
+import copy
 
 # 添加專案根目錄到系統路徑，以便可以引入模型
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -290,6 +291,156 @@ class TestMoEGate:
         
         # 簡單檢查：驗證輔助損失存在，說明它在鼓勵負載均衡
         assert aux_loss > 0
+
+    def test_visualize_moe_gate_outputs(self, default_config, set_seed):
+        """此測試案例用於可視化和解釋MoEGate的輸出，幫助理解topk_idx, topk_weight, aux_loss的含義和形狀"""
+        moe_gate = MoEGate(default_config)
+        
+        # 為了使輸出更容易理解，我們使用小型輸入
+        batch_size = 2
+        seq_len = 3
+        hidden_dim = default_config.dim
+        
+        # 創建隨機輸入張量
+        hidden_states = torch.randn(batch_size, seq_len, hidden_dim)
+        
+        # 執行前向傳播
+        topk_idx, topk_weight, aux_loss = moe_gate(hidden_states)
+        
+        # 將結果寫入文件
+        with open('tests/moe_gate_visualization.txt', 'w', encoding='utf-8') as f:
+            f.write(f"\n{'='*80}\n")
+            f.write(f"MoEGate配置:\n")
+            f.write(f"總專家數量 (n_routed_experts): {default_config.n_routed_experts}\n")
+            f.write(f"每個token選擇的專家數 (num_experts_per_tok): {default_config.num_experts_per_tok}\n")
+            f.write(f"是否使用序列級輔助損失 (seq_aux): {default_config.seq_aux}\n")
+            f.write(f"輔助損失權重 (aux_loss_alpha): {default_config.aux_loss_alpha}\n")
+            f.write(f"{'='*80}\n")
+            
+            # 打印輸入形狀
+            f.write(f"輸入形狀: {hidden_states.shape} (batch_size, seq_len, hidden_dim)\n")
+            
+            # 打印輸出形狀和值
+            f.write(f"\n{'='*30} topk_idx {'='*30}\n")
+            f.write(f"形狀: {topk_idx.shape} (batch_size*seq_len, num_experts_per_tok)\n")
+            f.write(f"具體值:\n{topk_idx}\n")
+            
+            # 重塑為更直觀的形式
+            reshaped_idx = topk_idx.view(batch_size, seq_len, default_config.num_experts_per_tok)
+            f.write(f"\n重塑為 (batch_size, seq_len, num_experts_per_tok): {reshaped_idx.shape}\n")
+            f.write(f"重塑後值:\n{reshaped_idx}\n")
+            
+            f.write(f"\n{'='*30} topk_weight {'='*30}\n")
+            f.write(f"形狀: {topk_weight.shape} (batch_size*seq_len, num_experts_per_tok)\n")
+            f.write(f"具體值:\n{topk_weight}\n")
+            
+            # 重塑為更直觀的形式
+            reshaped_weight = topk_weight.view(batch_size, seq_len, default_config.num_experts_per_tok)
+            f.write(f"\n重塑為 (batch_size, seq_len, num_experts_per_tok): {reshaped_weight.shape}\n")
+            f.write(f"重塑後值:\n{reshaped_weight}\n")
+            
+            f.write(f"\n{'='*30} aux_loss {'='*30}\n")
+            f.write(f"值: {aux_loss.item()}\n")
+            
+            # 創建一個用於解釋的示例
+            f.write(f"\n{'='*30} 實例解釋 {'='*30}\n")
+            f.write("以下是第一個批次的第一個token的解釋:\n")
+            token_idx = reshaped_idx[0, 0].tolist()
+            token_weight = reshaped_weight[0, 0].tolist()
+            
+            for i, (idx, weight) in enumerate(zip(token_idx, token_weight)):
+                f.write(f"專家{idx}被選中, 權重為{weight:.4f}\n")
+            
+            f.write(f"\n輔助損失(aux_loss)值為{aux_loss.item():.6f}, 這是一個純量值\n")
+            f.write(f"它用於促進所有專家的均衡使用，而不是針對單個專家\n")
+            
+            # 計算每個專家被選中的頻率
+            expert_counts = torch.zeros(default_config.n_routed_experts)
+            for idx in topk_idx.flatten():
+                expert_counts[idx] += 1
+            
+            expert_selection_percentage = expert_counts / len(topk_idx.flatten()) * 100
+            f.write(f"\n{'='*30} 專家選擇分佈 {'='*30}\n")
+            for i, percentage in enumerate(expert_selection_percentage):
+                f.write(f"專家{i}: 被選中{expert_counts[i]:.0f}次, 佔比{percentage:.2f}%\n")
+        
+        # 仍然保留打印輸出
+        print(f"\n結果已寫入 tests/moe_gate_visualization.txt")
+            
+        # 確保測試通過
+        assert topk_idx.shape == (batch_size * seq_len, default_config.num_experts_per_tok)
+        assert topk_weight.shape == (batch_size * seq_len, default_config.num_experts_per_tok)
+        assert isinstance(aux_loss, torch.Tensor) and aux_loss.numel() == 1
+
+    def test_vary_aux_loss_weight(self, default_config, set_seed):
+        """測試不同輔助損失權重對專家分配的影響"""
+        batch_size = 2
+        seq_len = 3
+        hidden_dim = default_config.dim
+        
+        # 創建固定的輸入張量以保持一致性
+        torch.manual_seed(42)  # 保持輸入一致
+        hidden_states = torch.randn(batch_size, seq_len, hidden_dim)
+        
+        aux_weights = [0.0, 0.1, 0.5, 1.0]
+        results = []
+        
+        # 將結果寫入文件
+        with open('tests/moe_gate_aux_loss_comparison.txt', 'w', encoding='utf-8') as f:
+            f.write(f"\n{'='*80}\n")
+            f.write("測試不同輔助損失權重對專家分配的影響\n")
+            
+            for weight in aux_weights:
+                # 創建配置副本並修改輔助損失權重
+                config = copy.deepcopy(default_config)
+                config.aux_loss_alpha = weight
+                
+                # 創建MoEGate
+                moe_gate = MoEGate(config)
+                
+                # 執行前向傳播
+                topk_idx, topk_weight, aux_loss = moe_gate(hidden_states)
+                
+                # 計算每個專家被選中的頻率
+                expert_counts = torch.zeros(config.n_routed_experts)
+                for idx in topk_idx.flatten():
+                    expert_counts[idx] += 1
+                
+                expert_selection_percentage = expert_counts / len(topk_idx.flatten()) * 100
+                
+                # 處理 aux_loss 可能是整數的情況（當 aux_loss_alpha=0.0 時）
+                aux_loss_value = aux_loss if isinstance(aux_loss, (int, float)) else aux_loss.item()
+                
+                results.append({
+                    'weight': weight,
+                    'aux_loss': aux_loss_value,
+                    'expert_counts': expert_counts.tolist(),
+                    'expert_selection_percentage': expert_selection_percentage.tolist()
+                })
+                
+                # 寫入結果
+                f.write(f"\n{'='*30} 輔助損失權重 = {weight} {'='*30}\n")
+                f.write(f"輔助損失值 = {aux_loss_value:.6f}\n")
+                f.write("專家選擇分佈:\n")
+                for i, (count, percentage) in enumerate(zip(expert_counts.tolist(), expert_selection_percentage.tolist())):
+                    f.write(f"專家{i}: 被選中{count:.0f}次, 佔比{percentage:.2f}%\n")
+                
+                # 計算方差作為分佈均勻性的指標
+                variance = sum((p - 25)**2 for p in expert_selection_percentage.tolist()) / len(expert_selection_percentage)
+                f.write(f"分佈方差: {variance:.2f} (越小表示分佈越均勻)\n")
+                
+                # 寫入專家選擇的具體索引和權重
+                f.write("\n專家選擇索引 (topk_idx):\n")
+                f.write(f"{topk_idx}\n")
+                
+                f.write("\n專家選擇權重 (topk_weight):\n")
+                f.write(f"{topk_weight}\n")
+        
+        # 仍然保留打印輸出
+        print(f"\n結果已寫入 tests/moe_gate_aux_loss_comparison.txt")
+        
+        # 確保測試通過
+        assert len(results) == len(aux_weights)
 
 
 # 用於直接運行測試的主程序
