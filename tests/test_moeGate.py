@@ -215,6 +215,9 @@ class TestMoEGate:
         moe_gate.train()
         _, _, train_aux_loss = moe_gate(hidden_states)
         
+        # 檢查在訓練模式下輔助損失是否大於0
+        assert train_aux_loss >= 0
+        
         # 評估模式
         moe_gate.eval()
         _, _, eval_aux_loss = moe_gate(hidden_states)
