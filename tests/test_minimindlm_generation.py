@@ -48,13 +48,14 @@ class TestMiniMindLMGeneration:
     
     def test_basic_generation(self, small_model, sample_input):
         """測試基本生成功能"""
-        output = small_model.generate(
-            sample_input,
-            max_new_tokens=10,
-            temperature=1.0,
-            top_p=1.0,
-            stream=False
-        )
+        with torch.no_grad():
+            output = small_model.generate(
+                sample_input,
+                max_new_tokens=10,
+                temperature=1.0,
+                top_p=1.0,
+                stream=False
+            )
         
         # 檢查輸出形狀
         assert output.shape[0] == sample_input.shape[0]
@@ -77,13 +78,14 @@ class TestMiniMindLMGeneration:
             # 多次生成以收集統計信息
             generations = []
             for _ in range(5):
-                output = small_model.generate(
-                    sample_input,
-                    max_new_tokens=10,
-                    temperature=temp,
-                    top_p=1.0,
-                    stream=False
-                )
+                with torch.no_grad():
+                    output = small_model.generate(
+                        sample_input,
+                        max_new_tokens=10,
+                        temperature=temp,
+                        top_p=1.0,
+                        stream=False
+                    )
                 # 只保留新生成的部分
                 new_tokens = output[:, sample_input.shape[1]:].tolist()[0]
                 generations.append(new_tokens)
@@ -118,13 +120,14 @@ class TestMiniMindLMGeneration:
             # 多次生成以收集統計信息
             generations = []
             for _ in range(5):
-                output = small_model.generate(
-                    sample_input,
-                    max_new_tokens=10,
-                    temperature=1.0,
-                    top_p=p,
-                    stream=False
-                )
+                with torch.no_grad():
+                    output = small_model.generate(
+                        sample_input,
+                        max_new_tokens=10,
+                        temperature=1.0,
+                        top_p=p,
+                        stream=False
+                    )
                 # 只保留新生成的部分
                 new_tokens = output[:, sample_input.shape[1]:].tolist()[0]
                 generations.append(new_tokens)
@@ -157,14 +160,15 @@ class TestMiniMindLMGeneration:
         
         for rp in rp_values:
             # 生成較長的序列以觀察重複情況
-            output = small_model.generate(
-                sample_input,
-                max_new_tokens=30,
-                temperature=1.0,
-                top_p=1.0,
-                rp=rp,
-                stream=False
-            )
+            with torch.no_grad():
+                output = small_model.generate(
+                    sample_input,
+                    max_new_tokens=30,
+                    temperature=1.0,
+                    top_p=1.0,
+                    rp=rp,
+                    stream=False
+                )
             
             # 只保留新生成的部分
             new_tokens = output[:, sample_input.shape[1]:].tolist()[0]
@@ -211,25 +215,27 @@ class TestMiniMindLMGeneration:
         """比較流式生成和直接生成的結果"""
         # 直接生成
         start_time = time.time()
-        direct_output = small_model.generate(
-            sample_input,
-            max_new_tokens=20,
-            temperature=1.0,
-            top_p=0.9,
-            stream=False
-        )
+        with torch.no_grad():
+            direct_output = small_model.generate(
+                sample_input,
+                max_new_tokens=20,
+                temperature=1.0,
+                top_p=0.9,
+                stream=False
+            )
         direct_time = time.time() - start_time
         
         # 流式生成
         start_time = time.time()
-        generator = small_model.generate(
-            sample_input,
-            max_new_tokens=20,
-            temperature=1.0,
-            top_p=0.9,
-            stream=True
-        )
-        stream_outputs = list(generator)
+        with torch.no_grad():
+            generator = small_model.generate(
+                sample_input,
+                max_new_tokens=20,
+                temperature=1.0,
+                top_p=0.9,
+                stream=True
+            )
+            stream_outputs = list(generator)
         stream_time = time.time() - start_time
         
         # 構建完整的流式輸出
@@ -258,13 +264,14 @@ class TestMiniMindLMGeneration:
     def test_eos_token_effect(self, small_model, sample_input):
         """測試 EOS 標記對生成長度的影響"""
         # 不使用 EOS 標記
-        output_no_eos = small_model.generate(
-            sample_input,
-            max_new_tokens=30,
-            temperature=1.0,
-            top_p=0.9,
-            eos_token_id=None
-        )
+        with torch.no_grad():
+            output_no_eos = small_model.generate(
+                sample_input,
+                max_new_tokens=30,
+                temperature=1.0,
+                top_p=0.9,
+                eos_token_id=None
+            )
         
         # 使用一個可能生成的 token 作為 EOS 標記
         # 選擇一個在前5個位置生成概率較高的 token
@@ -274,13 +281,14 @@ class TestMiniMindLMGeneration:
         
         eos_token_id = likely_tokens[0]  # 使用最可能的 token 作為 EOS
         
-        output_with_eos = small_model.generate(
-            sample_input,
-            max_new_tokens=30,
-            temperature=1.0,
-            top_p=0.9,
-            eos_token_id=eos_token_id
-        )
+        with torch.no_grad():
+            output_with_eos = small_model.generate(
+                sample_input,
+                max_new_tokens=30,
+                temperature=1.0,
+                top_p=0.9,
+                eos_token_id=eos_token_id
+            )
         
         # 記錄結果
         with open(OUTPUT_DIR / "eos_token_effect.txt", "w") as f:
@@ -298,24 +306,26 @@ class TestMiniMindLMGeneration:
         """測試快取對生成性能的影響"""
         # 不使用快取
         start_time = time.time()
-        small_model.generate(
-            sample_input,
-            max_new_tokens=20,
-            temperature=1.0,
-            top_p=0.9,
-            use_cache=False
-        )
+        with torch.no_grad():
+            small_model.generate(
+                sample_input,
+                max_new_tokens=20,
+                temperature=1.0,
+                top_p=0.9,
+                use_cache=False
+            )
         no_cache_time = time.time() - start_time
         
         # 使用快取
         start_time = time.time()
-        small_model.generate(
-            sample_input,
-            max_new_tokens=20,
-            temperature=1.0,
-            top_p=0.9,
-            use_cache=True
-        )
+        with torch.no_grad():
+            small_model.generate(
+                sample_input,
+                max_new_tokens=20,
+                temperature=1.0,
+                top_p=0.9,
+                use_cache=True
+            )
         with_cache_time = time.time() - start_time
         
         # 記錄結果
@@ -345,12 +355,13 @@ class TestMiniMindLMGeneration:
         ])
         
         # 批次生成
-        batch_output = small_model.generate(
-            input_ids,
-            max_new_tokens=10,
-            temperature=1.0,  # 使用確定性設置
-            top_p=1.0
-        )
+        with torch.no_grad():
+            batch_output = small_model.generate(
+                input_ids,
+                max_new_tokens=10,
+                temperature=1.0,  # 使用確定性設置
+                top_p=1.0
+            )
         
         # 檢查兩個序列的生成結果是否相同
         are_identical = torch.all(batch_output[0] == batch_output[1]).item()
@@ -379,12 +390,13 @@ class TestMiniMindLMGeneration:
         ])
         
         # 生成
-        output = small_model.generate(
-            input_ids,
-            max_new_tokens=10,
-            temperature=1.0,
-            top_p=0.9
-        )
+        with torch.no_grad():
+            output = small_model.generate(
+                input_ids,
+                max_new_tokens=10,
+                temperature=1.0,
+                top_p=0.9
+            )
         
         # 檢查每個輸入序列的前綴是否被保留
         for i in range(input_ids.shape[0]):
@@ -415,13 +427,14 @@ class TestMiniMindLMGeneration:
         ])
         
         # 生成
-        output = small_model.generate(
-            input_ids,
-            max_new_tokens=10,
-            temperature=1.0,
-            top_p=0.9,
-            pad_token_id=0
-        )
+        with torch.no_grad():
+            output = small_model.generate(
+                input_ids,
+                max_new_tokens=10,
+                temperature=1.0,
+                top_p=0.9,
+                pad_token_id=0
+            )
         
         # 檢查輸出形狀
         assert output.shape[0] == input_ids.shape[0]

@@ -2,7 +2,7 @@
 ![structure-moe](../../images/LLM-structure-moe.png)
 
 ## 我的提問
-從這兩張圖可看出，兩者主要差異源於 Transformer 的 k 層中先經過 GQA 處理後才分支為 FNN 或 MoE 流程，FNN 主要負責將注意力層的輸出進行進一步的特徵轉換，增強模型的表達能力，並通過殘差連接促進更好的訓練效果，而 `MoE` 也是增加模型表達能力的功能嗎？ 
+從這兩張圖可看出，兩者主要差異源於 Transformer 的 k 層中先經過 GQA 處理後才分支為 FNN(Feedforward Neural Network，前饋神經網絡) 或 MoE(Mixed of Experts) 流程，FNN 主要負責將注意力層的輸出進行進一步的特徵轉換，增強模型的表達能力，並通過殘差連接促進更好的訓練效果，而 `MoE` 也是增加模型表達能力的功能嗎？ 
 
 `MoE`（混合專家系統）確實是增加模型表達能力的功能，但與標準的 FFN 相比有顯著不同：
 
