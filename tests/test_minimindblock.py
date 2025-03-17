@@ -277,7 +277,8 @@ class TestMiniMindBlock:
         
         # 模擬新的輸入token（第二個序列）
         new_token = torch.randn(batch_size, 1, dim)
-        new_pos_cis = pos_cis[seq_len:seq_len+1]
+        # 確保 new_pos_cis 的切片正確
+        new_pos_cis = pos_cis[seq_len-1:seq_len]  # 應該是上一個序列的最後一個位置編碼
         
         # 使用先前的緩存進行第二次前向傳播
         output_with_cache, new_past_kv = basic_block(new_token, new_pos_cis, past_key_value=past_kv, use_cache=True)

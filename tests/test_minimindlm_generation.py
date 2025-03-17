@@ -414,11 +414,11 @@ class TestMiniMindLMGeneration:
     
     def test_different_length_inputs(self, small_model):
         """測試不同長度輸入的生成"""
-        # 創建不同長度的輸入序列
+        # 創建不同長度的輸入序列，並進行填充
         input_ids = torch.tensor([
-            [1, 2, 3, 4, 5],
-            [1, 2, 3],
-            [1, 2, 3, 4, 5, 6, 7]
+            [1, 2, 3, 4, 5, 0, 0],  # 序列1，長度5，填充到7
+            [1, 2, 3, 0, 0, 0, 0],  # 序列2，長度3，填充到7
+            [1, 2, 3, 4, 5, 6, 7]   # 序列3，長度7，不需要填充
         ])
         
         # 生成
@@ -428,27 +428,28 @@ class TestMiniMindLMGeneration:
                 max_new_tokens=5,  # 減少生成長度
                 temperature=1.0,
                 top_p=0.9,
+                pad_token_id=0,  # 指定填充標記
                 use_cache=True  # 明確設置
             )
         
         # 檢查每個輸入序列的前綴是否被保留
         for i in range(input_ids.shape[0]):
-            input_len = input_ids[i].shape[0]
-            assert torch.all(output[i, :input_len] == input_ids[i])
+            input_len = (input_ids[i] != 0).sum().item()  # 計算非填充部分的長度
+            assert torch.all(output[i, :input_len] == input_ids[i, :input_len])
         
         # 記錄結果
         with open(OUTPUT_DIR / "different_length_inputs.txt", "w") as f:
             f.write(f"輸出形狀: {output.shape}\n")
             
             for i in range(input_ids.shape[0]):
-                f.write(f"\n輸入 {i} (長度 {input_ids[i].shape[0]}):\n")
+                f.write(f"\n輸入 {i} (長度 {input_len}):\n")
                 f.write(str(input_ids[i].tolist()))
                 
                 f.write(f"\n輸出 {i}:\n")
                 f.write(str(output[i].tolist()))
                 
                 f.write(f"\n新生成標記 {i}:\n")
-                f.write(str(output[i, input_ids[i].shape[0]:].tolist()))
+                f.write(str(output[i, input_len:input_len+5].tolist()))  # 只顯示新生成的部分
                 f.write("\n" + "-"*50)
     
     def test_generation_with_padding(self, small_model):

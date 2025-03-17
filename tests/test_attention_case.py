@@ -68,7 +68,7 @@ class TestAttention:
         output, _ = attn(sample_input, sample_pos_cis)
         
         # 檢查輸出維度是否與輸入維度一致
-        assert output.shape == sample_input.shape[1:]
+        assert output.shape == sample_input.shape
     
     def test_kv_cache(self, tiny_config, sample_input, sample_pos_cis):
         """測試KV緩存功能"""
@@ -129,7 +129,7 @@ class TestAttention:
         
         # 檢查輸出形狀 - 不檢查 batch_size 維度，只檢查序列長度和特徵維度
         batch_size, seq_len = sample_input.shape[:2]
-        assert output.shape == sample_input.shape[1:]
+        assert output.shape == sample_input.shape
     
     def test_repeat_kv_function(self, tiny_config):
         """測試repeat_kv函數"""

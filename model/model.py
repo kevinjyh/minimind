@@ -24,17 +24,10 @@ class RMSNorm(torch.nn.Module):
 
 
 def precompute_pos_cis(dim: int, end: int = int(32 * 1024), theta: float = 1e6):
-    # 計算頻率基底 (base frequency)
     freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
-    
-    # 生成位置序列 (0 到 end-1)
-    t = torch.arange(end, device=freqs.device)
-    
-    # 計算外積得到位置-維度頻率矩陣
-    freqs = torch.outer(t, freqs).float()
-    
-    # 轉換為複數形式 (cosθ, sinθ)
-    pos_cis = torch.polar(torch.ones_like(freqs), freqs)  # e^(i·θ)
+    t = torch.arange(end, device=freqs.device)  # type: ignore
+    freqs = torch.outer(t, freqs).float()  # type: ignore
+    pos_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
     return pos_cis
 
 
@@ -93,140 +86,66 @@ class Attention(nn.Module):
                 pos_cis: torch.Tensor,
                 past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
                 use_cache=False):
-        """
-        參數說明：
-        x: 輸入張量，形狀為 (batch_size, seq_len, dim)
-        pos_cis: 位置編碼張量，形狀為 (seq_len, dim)
-        past_key_value: 過去的key/value緩存，形狀為 ((batch_size, n_kv_heads, seqlen, head_dim), (batch_size, n_kv_heads, seqlen, head_dim))
-        use_cache: 是否使用過去的key/value緩存
-
-        以下註解說明系對應 `images\LLM-structure.png` 圖片中右側標示為 (a) GQA 的綠色背景區塊的各部位
-        """
-        # 注意：輸入x已經經過前面的RMSNorm處理 (對應圖中最底部的RMSNorm)
-        
-        batch_size, seq_len, dim = x.shape
-        
-        # 線性投影層：將輸入投影到Q、K、V空間 (對應圖中底部的Linear層)
+        bsz, seq_len, _ = x.shape
         xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
-        
-        # 頭拆分：拆分成多個注意力頭
-        xq = xq.view(batch_size, seq_len, self.n_local_heads, self.head_dim)
-        xk = xk.view(batch_size, seq_len, self.n_local_kv_heads, self.head_dim)
-        xv = xv.view(batch_size, seq_len, self.n_local_kv_heads, self.head_dim)
-        
-        # 應用旋轉位置編碼RoPE (對應圖中Q和K'上方的RoPE框)
+        xq = xq.view(bsz, seq_len, self.n_local_heads, self.head_dim)
+        xk = xk.view(bsz, seq_len, self.n_local_kv_heads, self.head_dim)
+        xv = xv.view(bsz, seq_len, self.n_local_kv_heads, self.head_dim)
+
         xq, xk = apply_rotary_emb(xq, xk, pos_cis)
-        
-        # KV緩存處理 (用於推理加速)
+        # kv_cache实现
         if past_key_value is not None:
-            # 連接過去和當前的key/value
-            key_cache, value_cache = past_key_value
-            xk = torch.cat([key_cache, xk], dim=1)
-            xv = torch.cat([value_cache, xv], dim=1)
-        
-        # 如果Key和Value頭數少於Query頭數，進行重複擴展
-        # (對應GQA的核心概念：grouped-query attention)
-        if self.n_local_kv_heads != self.n_local_heads:
-            # 對K'和V'進行重複 
-            xk = repeat_kv(xk, self.n_rep)  # (bs, seqlen, n_heads, head_dim)
-            xv = repeat_kv(xv, self.n_rep)  # (bs, seqlen, n_heads, head_dim)
-        
-        # 轉置操作，為注意力計算準備形狀
-        q = xq.transpose(1, 2)  # (bs, n_heads, seqlen, head_dim)
-        k = xk.transpose(1, 2)  # (bs, n_heads, seqlen, head_dim)
-        v = xv.transpose(1, 2)  # (bs, n_heads, seqlen, head_dim)
-        
-        # 計算注意力分數 Q·K^T/√d (對應圖中Q和K'之間的矩陣乘法⊗)
-        scores = torch.matmul(q, k.transpose(2, 3)) / math.sqrt(self.head_dim)
-        
-        # 注意力掩碼處理 (對應圖中"mask"部分)
-        # 在自迴歸(autoregressive)模式中，確保每個位置只能看到其前面的位置
+            xk = torch.cat([past_key_value[0], xk], dim=1)
+            xv = torch.cat([past_key_value[1], xv], dim=1)
+        past_kv = (xk, xv) if use_cache else None
+
+        xq, xk, xv = (
+            xq.transpose(1, 2),
+            repeat_kv(xk, self.n_rep).transpose(1, 2),
+            repeat_kv(xv, self.n_rep).transpose(1, 2)
+        )
         if self.flash and seq_len != 1:
             dropout_p = self.dropout if self.training else 0.0
             output = F.scaled_dot_product_attention(
-                q, k, v,
+                xq, xk, xv,
                 attn_mask=None,
                 dropout_p=dropout_p,
                 is_causal=True
             )
         else:
+            scores = (xq @ xk.transpose(-2, -1)) / math.sqrt(self.head_dim)
             scores += self.mask[:, :, :seq_len, :seq_len]
-            scores = F.softmax(scores.float(), dim=-1).type_as(q)
+            scores = F.softmax(scores.float(), dim=-1).type_as(xq)
             scores = self.attn_dropout(scores)
-            output = scores @ v
+            output = scores @ xv
 
-        # 轉置並重塑張量，從多頭形狀轉回序列形狀
-        output = output.transpose(1, 2).contiguous()  # (bs, seqlen, n_heads, head_dim)
-        output = output.view(batch_size, seq_len, -1)
-        # `self.wo(output)` 線性投影層對應於圖中最上方的 Linear 方塊
-        # 它將多頭注意力的結果投影回模型的隱藏維度
-        # ⊕ 代表殘差連接 self.resid_dropout(...)
+        output = output.transpose(1, 2).reshape(bsz, seq_len, -1)
         output = self.resid_dropout(self.wo(output))
-        
-        # 注意：這裡返回的output會與原始輸入進行殘差連接 (對應圖中最右側向上的跳過連接)
-        # 殘差連接在MiniMindBlock中完成：output = x + output
-        
-        # 緩存處理
-        if use_cache:
-            return output, (xk, xv)
-        else:
-            return output
+        return output, past_kv
 
 
 class FeedForward(nn.Module):
-    """
-    Feed-Forward Network (FFN) 模組
-    對應圖中標示為 "(b) FFN" 的流程圖區塊
-    """
     def __init__(self, config: LMConfig):
         super().__init__()
         if config.hidden_dim is None:
             hidden_dim = 4 * config.dim
             hidden_dim = int(2 * hidden_dim / 3)
             config.hidden_dim = config.multiple_of * ((hidden_dim + config.multiple_of - 1) // config.multiple_of)
-        # 對應圖中底部兩個並行的 Linear 層
-        self.w1 = nn.Linear(config.dim, config.hidden_dim, bias=False)  # 左側 Linear 層
-        self.w3 = nn.Linear(config.dim, config.hidden_dim, bias=False)  # 右側 Linear 層
-        
-        # 對應圖中中間的 Linear 層
+        self.w1 = nn.Linear(config.dim, config.hidden_dim, bias=False)
         self.w2 = nn.Linear(config.hidden_dim, config.dim, bias=False)
-        
-        # 對應圖中的 Dropout 層
+        self.w3 = nn.Linear(config.dim, config.hidden_dim, bias=False)
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x):
-        """
-        FFN 前向傳播流程
-        注意：輸入 x 已經過 RMSNorm 處理 (對應圖中底部的 RMSNorm)
-        """
-        # 1. 並行處理兩個線性層
-        hidden1 = self.w1(x)  # 左側路徑
-        hidden3 = self.w3(x)  # 右側路徑
-        
-        # 2. 應用 SiLU 激活函數 (對應圖中的 SiLU 黃色方塊)
-        hidden1_activated = F.silu(hidden1)
-        
-        # 3. 點乘操作 (對應圖中的 ⊙ 符號)
-        hidden = hidden1_activated * hidden3
-        
-        # 4. 通過第二個線性層 (對應圖中中間的 Linear 層)
-        output = self.w2(hidden)
-        
-        # 5. 應用 Dropout (對應圖中的 Dropout 粉色方塊)
-        output = self.dropout(output)
-        
-        # 注意：殘差連接 (對應圖中最上方的 ⊕ 符號) 在 MiniMindBlock 中實現
-        # 即 output = x + ffn_output
-        
-        return output
+        return self.dropout(self.w2(F.silu(self.w1(x)) * self.w3(x)))
 
 
 class MoEGate(nn.Module):
     def __init__(self, config: LMConfig):
         super().__init__()
         self.config = config
-        self.top_k = config.num_experts_per_tok  # 每個token選擇的專家數量
-        self.n_routed_experts = config.n_routed_experts  # 可路由專家的總數
+        self.top_k = config.num_experts_per_tok
+        self.n_routed_experts = config.n_routed_experts
 
         self.scoring_func = config.scoring_func
         self.alpha = config.aux_loss_alpha
@@ -234,7 +153,7 @@ class MoEGate(nn.Module):
 
         self.norm_topk_prob = config.norm_topk_prob
         self.gating_dim = config.dim
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, self.gating_dim)))  # 路由權重
+        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, self.gating_dim)))
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
@@ -244,39 +163,38 @@ class MoEGate(nn.Module):
     def forward(self, hidden_states):
         bsz, seq_len, h = hidden_states.shape
         hidden_states = hidden_states.view(-1, h)
-        # 計算每個token應該被哪些專家處理
-        logits = F.linear(hidden_states, self.weight, None)  # 計算路由分數
+        logits = F.linear(hidden_states, self.weight, None)
         if self.scoring_func == 'softmax':
-            scores = logits.softmax(dim=-1)  # 使用softmax計算每個專家的概率
+            scores = logits.softmax(dim=-1)
         else:
             raise NotImplementedError(f'insupportable scoring function for MoE gating: {self.scoring_func}')
 
-        topk_weight, topk_idx = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)  # 選擇每個token的topk專家
+        topk_weight, topk_idx = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
 
         if self.top_k > 1 and self.norm_topk_prob:
-            denominator = topk_weight.sum(dim=-1, keepdim=True) + 1e-20  # 分母
-            topk_weight = topk_weight / denominator  # 歸一化
+            denominator = topk_weight.sum(dim=-1, keepdim=True) + 1e-20
+            topk_weight = topk_weight / denominator
 
         if self.training and self.alpha > 0.0:
-            scores_for_aux = scores  # 輔助損失的得分
-            aux_topk = self.top_k  # 輔助損失的專家數量
-            topk_idx_for_aux_loss = topk_idx.view(bsz, -1)  # 輔助損失的專家索引
+            scores_for_aux = scores
+            aux_topk = self.top_k
+            topk_idx_for_aux_loss = topk_idx.view(bsz, -1)
             if self.seq_aux:
-                scores_for_seq_aux = scores_for_aux.view(bsz, seq_len, -1)  # 輔助損失的得分
-                ce = torch.zeros(bsz, self.n_routed_experts, device=hidden_states.device)  # 輔助損失的交叉熵
+                scores_for_seq_aux = scores_for_aux.view(bsz, seq_len, -1)
+                ce = torch.zeros(bsz, self.n_routed_experts, device=hidden_states.device)
                 ce.scatter_add_(1, topk_idx_for_aux_loss,
                                 torch.ones(bsz, seq_len * aux_topk, device=hidden_states.device)).div_(
-                    seq_len * aux_topk / self.n_routed_experts)  # 輔助損失的交叉熵
-                aux_loss = (ce * scores_for_seq_aux.mean(dim=1)).sum(dim=1).mean() * self.alpha  # 輔助損失
+                    seq_len * aux_topk / self.n_routed_experts)
+                aux_loss = (ce * scores_for_seq_aux.mean(dim=1)).sum(dim=1).mean() * self.alpha
             else:
-                mask_ce = F.one_hot(topk_idx_for_aux_loss.view(-1), num_classes=self.n_routed_experts)  # 輔助損失的掩碼
-                ce = mask_ce.float().mean(0)  # 輔助損失的交叉熵
-                Pi = scores_for_aux.mean(0)  # 輔助損失的平均得分
-                fi = ce * self.n_routed_experts  # 輔助損失的交叉熵
-                aux_loss = (Pi * fi).sum() * self.alpha  # 輔助損失
+                mask_ce = F.one_hot(topk_idx_for_aux_loss.view(-1), num_classes=self.n_routed_experts)
+                ce = mask_ce.float().mean(0)
+                Pi = scores_for_aux.mean(0)
+                fi = ce * self.n_routed_experts
+                aux_loss = (Pi * fi).sum() * self.alpha
         else:
-            aux_loss = 0  # 如果不在訓練模式下，輔助損失為0
-        return topk_idx, topk_weight, aux_loss  # 返回專家索引、專家權重和輔助損失
+            aux_loss = 0
+        return topk_idx, topk_weight, aux_loss
 
 
 class MOEFeedForward(nn.Module):
