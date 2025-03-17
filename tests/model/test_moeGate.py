@@ -6,9 +6,12 @@ import os
 import math
 from torch.nn import functional as F
 import copy
+from pathlib import Path
 
-# 添加專案根目錄到系統路徑，以便可以引入模型
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 修正：添加專案根目錄到系統路徑，以便可以引入模型
+root_dir = str(Path(__file__).parent.parent.parent.absolute())
+sys.path.insert(0, root_dir)  # 使用insert(0)確保優先搜索
+
 from model.LMConfig import LMConfig
 from model.model import MoEGate
 

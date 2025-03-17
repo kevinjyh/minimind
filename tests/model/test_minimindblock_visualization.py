@@ -8,10 +8,24 @@ import os
 from pathlib import Path
 import time
 from collections import defaultdict
+import platform
+import warnings
 
-# 添加根目錄到系統路徑
-root_dir = str(Path(__file__).parent.parent.absolute())
-sys.path.append(root_dir)
+warnings.filterwarnings("ignore", category=UserWarning, module="matplotlib")
+
+# 設定中文字體
+if platform.system() == 'Windows':
+    plt.rcParams['font.sans-serif'] = ['SimHei']  # Windows系統用黑體
+elif platform.system() == 'Darwin':
+    plt.rcParams['font.sans-serif'] = ['Arial Unicode MS']  # Mac系統
+else:
+    plt.rcParams['font.sans-serif'] = ['WenQuanYi Zen Hei']  # Linux系統
+
+plt.rcParams['axes.unicode_minus'] = False  # 解決負號顯示問題
+
+# 添加根目錄到系統路徑（向上三層到專案根目錄）
+root_dir = str(Path(__file__).parent.parent.parent.absolute())
+sys.path.insert(0, root_dir)  # 使用insert(0)確保優先搜索
 
 from model.model import MiniMindBlock, Attention, FeedForward, MOEFeedForward, apply_rotary_emb
 from model.LMConfig import LMConfig
@@ -252,9 +266,9 @@ class TestMiniMindBlockVisualization:
             
             # 繪製熱力圖
             sns.heatmap(head_weights, ax=ax, cmap="viridis", vmin=0, vmax=1)
-            ax.set_title(f"Attention Head {i}")
-            ax.set_xlabel("Key Position")
-            ax.set_ylabel("Query Position")
+            ax.set_title(f"Attention Head {i}", fontproperties='SimHei')
+            ax.set_xlabel("Key Position", fontproperties='SimHei')
+            ax.set_ylabel("Query Position", fontproperties='SimHei')
         
         plt.tight_layout()
         plt.savefig(output_dir / "attention_patterns.png")
@@ -501,9 +515,14 @@ class TestMiniMindBlockVisualization:
         }
         
         # 保存結果到文本文件
-        with open(output_dir / "performance_results.txt", "w") as f:
+        with open(output_dir / "performance_results.txt", "w", encoding='utf-8') as f:
             f.write(f"標準模型時間: {standard_time:.6f} 秒\n")
             f.write(f"MoE模型時間: {moe_time:.6f} 秒\n")
             f.write(f"速度比率 (標準/MoE): {result['speedup_ratio']:.6f}\n")
         
-        return result 
+        # 改為添加斷言(assert)來驗證性能
+        assert moe_time > standard_time * 0.8, "MoE模型不應比標準模型慢超過20%"
+        assert result['speedup_ratio'] < 1.0, "標準模型應比MoE模型快"
+
+        # 可選：打印結果但不返回
+        print(f"\n性能測試結果: {result}") 

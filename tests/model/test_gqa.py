@@ -6,9 +6,9 @@ import os
 from pathlib import Path
 import math
 
-# 添加根目錄到系統路徑
-root_dir = str(Path(__file__).parent.parent.absolute())
-sys.path.append(root_dir)
+# 修正：添加專案根目錄到系統路徑
+root_dir = str(Path(__file__).parent.parent.parent.absolute())
+sys.path.insert(0, root_dir)  # 使用insert(0)確保優先搜索
 
 from model.model import Attention, precompute_pos_cis, repeat_kv, apply_rotary_emb
 from model.LMConfig import LMConfig

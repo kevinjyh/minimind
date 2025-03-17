@@ -7,6 +7,12 @@ matplotlib.use('Agg')  # 使用非交互式後端
 import matplotlib.pyplot as plt
 from pathlib import Path
 import time
+import sys
+import platform
+
+# 修正導入路徑
+root_dir = str(Path(__file__).parent.parent.parent.absolute())
+sys.path.insert(0, root_dir)  # 使用insert(0)確保優先搜索
 
 from model.model import MiniMindLM
 from model.LMConfig import LMConfig
@@ -20,7 +26,13 @@ OUTPUT_DIR = Path("tests/generation_output")
 OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 
 # 設置中文字體以確保圖表正確顯示中文
-plt.rcParams['font.sans-serif'] = ['Microsoft JhengHei']  # Windows 系統中文設定
+if platform.system() == 'Windows':
+    plt.rcParams['font.sans-serif'] = ['SimHei']  # Windows系統用黑體
+elif platform.system() == 'Darwin':
+    plt.rcParams['font.sans-serif'] = ['Arial Unicode MS']  # Mac系統
+else:
+    plt.rcParams['font.sans-serif'] = ['WenQuanYi Zen Hei']  # Linux系統
+
 plt.rcParams['axes.unicode_minus'] = False  # 解決負號顯示問題
 
 class TestMiniMindLMGeneration:
@@ -231,7 +243,7 @@ class TestMiniMindLMGeneration:
             assert results[1.0] >= results[2.0] * 0.8, "重複懲罰應降低重複率"
     
     def test_stream_vs_direct_generation(self, small_model, sample_input):
-        """比較流式生成和直接生成的結果"""
+        """測試流式生成和直接生成的差異"""
         # 直接生成
         start_time = time.time()
         with torch.no_grad():
@@ -280,8 +292,8 @@ class TestMiniMindLMGeneration:
             match_ratio = 0
             stream_final = sample_input  # 如果沒有生成，就使用輸入作為最終輸出
         
-        # 記錄結果
-        with open(OUTPUT_DIR / "stream_vs_direct.txt", "w") as f:
+        # 記錄結果到文件
+        with open(OUTPUT_DIR / "stream_vs_direct.txt", "w", encoding='utf-8') as f:
             f.write(f"直接生成時間: {direct_time:.4f} 秒\n")
             f.write(f"流式生成時間: {stream_time:.4f} 秒\n")
             f.write(f"輸出匹配比例: {match_ratio:.4f}\n")
@@ -295,7 +307,7 @@ class TestMiniMindLMGeneration:
             f.write(str(stream_final.tolist()))
     
     def test_eos_token_effect(self, small_model, sample_input):
-        """測試 EOS 標記對生成長度的影響"""
+        """測試 EOS token 對生成結果的影響"""
         # 不使用 EOS 標記
         with torch.no_grad():
             output_no_eos = small_model.generate(
@@ -328,8 +340,8 @@ class TestMiniMindLMGeneration:
                 use_cache=True  # 明確設置
             )
         
-        # 記錄結果
-        with open(OUTPUT_DIR / "eos_token_effect.txt", "w") as f:
+        # 記錄結果到文件
+        with open(OUTPUT_DIR / "eos_token_effect.txt", "w", encoding='utf-8') as f:
             f.write(f"EOS 標記 ID: {eos_token_id}\n")
             f.write(f"無 EOS 生成形狀: {output_no_eos.shape}\n")
             f.write(f"有 EOS 生成形狀: {output_with_eos.shape}\n")
@@ -341,7 +353,7 @@ class TestMiniMindLMGeneration:
             f.write(str(output_with_eos.tolist()))
     
     def test_cache_performance(self, small_model, sample_input):
-        """測試快取對生成性能的影響"""
+        """測試使用緩存與不使用緩存的性能差異"""
         # 增加生成長度並多次測量
         num_runs = 3  # 增加測量次數
         max_new_tokens = 50  # 增加生成長度
@@ -378,8 +390,8 @@ class TestMiniMindLMGeneration:
         avg_no_cache = sum(no_cache_times) / num_runs
         avg_with_cache = sum(with_cache_times) / num_runs
         
-        # 記錄完整結果
-        with open(OUTPUT_DIR / "cache_performance.txt", "w") as f:
+        # 記錄結果到文件
+        with open(OUTPUT_DIR / "cache_performance.txt", "w", encoding='utf-8') as f:
             f.write(f"多次測量結果 (次數={num_runs}):\n")
             f.write(f"無快取時間: {no_cache_times}\n")
             f.write(f"有快取時間: {with_cache_times}\n\n")
@@ -434,8 +446,8 @@ class TestMiniMindLMGeneration:
         # 檢查兩個序列的生成結果是否相同
         are_identical = torch.all(batch_output[0] == batch_output[1]).item()
         
-        # 記錄結果
-        with open(OUTPUT_DIR / "batch_consistency.txt", "w") as f:
+        # 記錄結果到文件
+        with open(OUTPUT_DIR / "batch_consistency.txt", "w", encoding='utf-8') as f:
             f.write(f"批次輸出是否相同: {are_identical}\n")
             f.write(f"批次輸出形狀: {batch_output.shape}\n")
             
@@ -449,7 +461,7 @@ class TestMiniMindLMGeneration:
         assert are_identical
     
     def test_different_length_inputs(self, small_model):
-        """測試不同長度輸入的生成"""
+        """測試不同長度輸入的生成行為"""
         # 創建不同長度的輸入序列，並進行填充
         input_ids = torch.tensor([
             [1, 2, 3, 4, 5, 0, 0],  # 序列1，長度5，填充到7
@@ -473,8 +485,8 @@ class TestMiniMindLMGeneration:
             input_len = (input_ids[i] != 0).sum().item()  # 計算非填充部分的長度
             assert torch.all(output[i, :input_len] == input_ids[i, :input_len])
         
-        # 記錄結果
-        with open(OUTPUT_DIR / "different_length_inputs.txt", "w") as f:
+        # 記錄結果到文件
+        with open(OUTPUT_DIR / "different_length_inputs.txt", "w", encoding='utf-8') as f:
             f.write(f"輸出形狀: {output.shape}\n")
             
             for i in range(input_ids.shape[0]):
@@ -489,7 +501,7 @@ class TestMiniMindLMGeneration:
                 f.write("\n" + "-"*50)
     
     def test_generation_with_padding(self, small_model):
-        """測試帶填充的生成"""
+        """測試帶有填充的輸入對生成的影響"""
         # 創建帶填充的輸入序列
         input_ids = torch.tensor([
             [1, 2, 3, 4, 5, 0, 0],  # 序列1，長度5，後面填充0
@@ -510,8 +522,8 @@ class TestMiniMindLMGeneration:
         # 檢查輸出形狀
         assert output.shape[0] == input_ids.shape[0]
         
-        # 記錄結果
-        with open(OUTPUT_DIR / "generation_with_padding.txt", "w") as f:
+        # 記錄結果到文件
+        with open(OUTPUT_DIR / "generation_with_padding.txt", "w", encoding='utf-8') as f:
             f.write(f"輸出形狀: {output.shape}\n")
             
             for i in range(input_ids.shape[0]):

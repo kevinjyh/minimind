@@ -4,9 +4,12 @@ import torch.nn as nn
 import sys
 import os
 from typing import Tuple, List, Optional
+from pathlib import Path
 
-# 添加模型目錄到路徑中
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+# 修正：添加專案根目錄到系統路徑
+root_dir = str(Path(__file__).parent.parent.parent.absolute())
+sys.path.insert(0, root_dir)  # 使用insert(0)確保優先搜索
+
 from model.LMConfig import LMConfig
 from model.model import MOEFeedForward, FeedForward, MoEGate
 

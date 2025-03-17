@@ -5,11 +5,11 @@ import sys
 import os
 from pathlib import Path
 
-# 添加根目錄到系統路徑
-root_dir = str(Path(__file__).parent.parent.absolute())
-sys.path.append(root_dir)
+# 修正：添加專案根目錄到系統路徑
+root_dir = str(Path(__file__).parent.parent.parent.absolute())
+sys.path.insert(0, root_dir)  # 使用insert(0)確保優先搜索
 
-from model.model import MiniMindBlock, RMSNorm, Attention, FeedForward, MOEFeedForward
+from model.model import MiniMindBlock, RMSNorm, Attention, FeedForward, MOEFeedForward, apply_rotary_emb
 from model.LMConfig import LMConfig
 
 

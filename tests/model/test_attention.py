@@ -2,9 +2,12 @@ import torch
 import pytest
 import sys
 import os
+from pathlib import Path
 
-# 確保可以導入模型模塊
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# 修正：確保可以導入模型模塊
+# 添加專案根目錄到系統路徑（向上層到專案根目錄）
+root_dir = str(Path(__file__).parent.parent.parent.absolute())
+sys.path.insert(0, root_dir)  # 使用insert(0)確保優先搜索
 
 from model.LMConfig import LMConfig
 from model.model import Attention, precompute_pos_cis, repeat_kv

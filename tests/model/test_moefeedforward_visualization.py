@@ -5,29 +5,37 @@ import sys
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 from typing import Tuple, List, Optional
 from pathlib import Path
+import time
+import platform
 
-# 添加模型目錄到路徑中
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+# 修正：添加專案根目錄到系統路徑
+root_dir = str(Path(__file__).parent.parent.parent.absolute())
+sys.path.insert(0, root_dir)  # 使用insert(0)確保優先搜索
+
+from model.model import MOEFeedForward, FeedForward
 from model.LMConfig import LMConfig
-from model.model import MOEFeedForward, MoEGate
+from model.model import MoEGate
 
 # 設置隨機種子以確保測試的可重現性
 torch.manual_seed(42)
 np.random.seed(42)
 
 # 創建輸出目錄
-OUTPUT_DIR = Path("tests/generation_output")
+OUTPUT_DIR = Path("tests/visualization_output")
 OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 
-# 在檔案開頭 import 之後添加以下設定
-plt.rcParams['font.sans-serif'] = ['Microsoft JhengHei']  # Windows 系統中文設定
-plt.rcParams['axes.unicode_minus'] = False  # 解決負號顯示問題
+# 設置中文字體以確保圖表正確顯示中文
+if platform.system() == 'Windows':
+    plt.rcParams['font.sans-serif'] = ['SimHei']  # Windows系統用黑體
+elif platform.system() == 'Darwin':
+    plt.rcParams['font.sans-serif'] = ['Arial Unicode MS']  # Mac系統
+else:
+    plt.rcParams['font.sans-serif'] = ['WenQuanYi Zen Hei']  # Linux系統
 
-# 如果使用 macOS 或 Linux 系統，可改用以下字體設定
-# plt.rcParams['font.sans-serif'] = ['Arial Unicode MS']  # macOS
-# plt.rcParams['font.sans-serif'] = ['Noto Sans CJK TC']  # Linux
+plt.rcParams['axes.unicode_minus'] = False  # 解決負號顯示問題
 
 class TestMOEFeedForwardVisualization:
     """MOEFeedForward類的可視化測試，幫助理解專家選擇和貢獻"""
