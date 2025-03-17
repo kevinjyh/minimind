@@ -71,64 +71,83 @@ class TestAttention:
         assert output.shape == sample_input.shape
     
     def test_kv_cache(self, tiny_config, sample_input, sample_pos_cis):
-        """測試KV緩存功能"""
-        # 對於測試 KV 緩存，我們需要使用一個特殊的配置，使 n_heads = n_kv_heads
-        # 這樣就不會觸發 repeat_kv 邏輯，避免緩存形狀不一致的問題
-        special_config = LMConfig(
-            dim=64,          
-            n_heads=2,        # 使 n_heads = n_kv_heads 以避免形狀不一致
-            n_kv_heads=2,     
-            max_seq_len=32,   
-            flash_attn=False, 
-            dropout=0.0       
-        )
-        
-        # 為 special_config 創建適合的位置編碼
+        """測試KV緩存功能，支持 n_heads != n_kv_heads 的GQA情況"""
         batch_size, seq_len = sample_input.shape[:2]
-        special_pos_cis = precompute_pos_cis(
-            dim=special_config.dim // special_config.n_heads, 
-            end=special_config.max_seq_len,
-            theta=special_config.rope_theta
-        )[:seq_len]
         
-        attn = Attention(special_config)
+        # 使用原始配置，確保GQA情況（n_heads != n_kv_heads）能正確測試
+        attn = Attention(tiny_config)
         
         # 第一次前向傳播，使用KV緩存
-        output1, past_kv = attn(sample_input, special_pos_cis, use_cache=True)
+        output1, past_kv = attn(sample_input, sample_pos_cis, use_cache=True)
         
         # 檢查KV緩存的形狀
         assert len(past_kv) == 2  # (K, V)
         k_cache, v_cache = past_kv
         
-        # 檢查 k_cache 的形狀是否正確
-        assert k_cache.shape == (batch_size, seq_len, special_config.n_kv_heads, attn.head_dim)
-        assert v_cache.shape == (batch_size, seq_len, special_config.n_kv_heads, attn.head_dim)
+        # 檢查 k_cache 和 v_cache 的形狀是否正確
+        # 注意：在實際模型中，緩存的形狀是 [batch_size, seq_len, n_kv_heads, head_dim]
+        assert k_cache.shape == (batch_size, seq_len, tiny_config.n_kv_heads, attn.head_dim)
+        assert v_cache.shape == (batch_size, seq_len, tiny_config.n_kv_heads, attn.head_dim)
         
         # 使用緩存進行第二次前向傳播
-        next_token = torch.randn(batch_size, 1, special_config.dim)  # 只有一個token
-        # 為新的token使用適當長度的位置編碼
-        next_pos_cis = special_pos_cis[:1]  # 只取第一個位置的編碼
+        next_token = torch.randn(batch_size, 1, tiny_config.dim)  # 只有一個token
+        next_pos_cis = precompute_pos_cis(
+            dim=tiny_config.dim // tiny_config.n_heads, 
+            end=tiny_config.max_seq_len,
+            theta=tiny_config.rope_theta
+        )[seq_len:seq_len+1]  # 使用下一個位置的編碼
+        
         output2, past_kv2 = attn(next_token, next_pos_cis, past_key_value=past_kv, use_cache=True)
         
         # 檢查輸出形狀
-        assert output2.shape == (batch_size, 1, special_config.dim)
+        assert output2.shape == (batch_size, 1, tiny_config.dim)
         
         # 檢查新的KV緩存是否正確附加了新數據
-        assert past_kv2[0].shape == (batch_size, seq_len + 1, special_config.n_kv_heads, attn.head_dim)
-        assert past_kv2[1].shape == (batch_size, seq_len + 1, special_config.n_kv_heads, attn.head_dim)
+        assert past_kv2[0].shape == (batch_size, seq_len + 1, tiny_config.n_kv_heads, attn.head_dim)
+        assert past_kv2[1].shape == (batch_size, seq_len + 1, tiny_config.n_kv_heads, attn.head_dim)
+        
+        # 驗證緩存的連續性：新緩存的前seq_len部分應該與舊緩存相同
+        assert torch.allclose(past_kv2[0][:, :seq_len, :, :], k_cache)
+        assert torch.allclose(past_kv2[1][:, :seq_len, :, :], v_cache)
     
     def test_gqa_mechanism(self, tiny_config, sample_input, sample_pos_cis):
         """測試GQA機制 - 專門測試 n_heads > n_kv_heads 的情況"""
         # 確保 tiny_config 的 n_heads 和 n_kv_heads 符合 GQA 要求
         assert tiny_config.n_heads > tiny_config.n_kv_heads
+        assert tiny_config.n_heads % tiny_config.n_kv_heads == 0, "n_heads必須是n_kv_heads的倍數"
         
         attn = Attention(tiny_config)
+        n_rep = attn.n_rep
         
-        # 執行前向傳播
+        # 驗證 n_rep 計算正確
+        assert n_rep == tiny_config.n_heads // tiny_config.n_kv_heads
+        
+        # 實現一個簡化版本的前向傳播過程來驗證GQA機制
+        batch_size, seq_len, dim = sample_input.shape
+        
+        # 手動計算q, k, v投影
+        q = attn.wq(sample_input).view(batch_size, seq_len, tiny_config.n_heads, attn.head_dim)
+        k = attn.wk(sample_input).view(batch_size, seq_len, tiny_config.n_kv_heads, attn.head_dim)
+        v = attn.wv(sample_input).view(batch_size, seq_len, tiny_config.n_kv_heads, attn.head_dim)
+        
+        # 手動重複k和v
+        k_repeated = repeat_kv(k, n_rep)
+        v_repeated = repeat_kv(v, n_rep)
+        
+        # 驗證重複後的形狀是否正確
+        assert k_repeated.shape == (batch_size, seq_len, tiny_config.n_heads, attn.head_dim)
+        assert v_repeated.shape == (batch_size, seq_len, tiny_config.n_heads, attn.head_dim)
+        
+        # 檢查重複模式：同一KV頭的值被複製到多個Q頭
+        for kv_head_idx in range(tiny_config.n_kv_heads):
+            for rep_idx in range(n_rep):
+                q_head_idx = kv_head_idx * n_rep + rep_idx
+                # 驗證k和v確實被正確重複
+                assert torch.allclose(k_repeated[:, :, q_head_idx, :], k[:, :, kv_head_idx, :])
+                assert torch.allclose(v_repeated[:, :, q_head_idx, :], v[:, :, kv_head_idx, :])
+        
+        # 執行前向傳播確認整體功能正常
         output, _ = attn(sample_input, sample_pos_cis)
-        
-        # 檢查輸出形狀 - 不檢查 batch_size 維度，只檢查序列長度和特徵維度
-        batch_size, seq_len = sample_input.shape[:2]
         assert output.shape == sample_input.shape
     
     def test_repeat_kv_function(self, tiny_config):
@@ -173,14 +192,13 @@ class TestAttention:
             theta=tiny_config.rope_theta
         )[:seq_len]
         
-        # 初始化Attention層
+        # 初始化Attention層，禁用dropout以確保結果確定性
         attn = Attention(tiny_config)
         
         # 記錄中間值的hook
         query_list = []
         key_list = []
         value_list = []
-        attn_weights_list = []
         
         # 註冊hooks來捕獲中間計算結果
         def get_q_hook(module, input, output):
@@ -197,24 +215,84 @@ class TestAttention:
         k_hook = attn.wk.register_forward_hook(get_k_hook)
         v_hook = attn.wv.register_forward_hook(get_v_hook)
         
-        # 執行前向傳播
-        _ = attn(x, pos_cis)
+        try:
+            # 執行前向傳播
+            _ = attn(x, pos_cis)
+            
+            # 驗證Query, Key, Value的形狀
+            assert len(query_list) == 1
+            assert len(key_list) == 1
+            assert len(value_list) == 1
+            
+            q = query_list[0]
+            k = key_list[0]
+            v = value_list[0]
+            
+            # 檢查Q, K, V的形狀
+            assert q.shape == (bs, seq_len, tiny_config.n_heads * attn.head_dim)
+            assert k.shape == (bs, seq_len, tiny_config.n_kv_heads * attn.head_dim)
+            assert v.shape == (bs, seq_len, tiny_config.n_kv_heads * attn.head_dim)
+            
+            # 手動計算注意力分數，檢查因果掩碼效果
+            q_reshaped = q.view(bs, seq_len, tiny_config.n_heads, attn.head_dim).transpose(1, 2)
+            k_reshaped = k.view(bs, seq_len, tiny_config.n_kv_heads, attn.head_dim).transpose(1, 2)
+            k_reshaped = repeat_kv(k.view(bs, seq_len, tiny_config.n_kv_heads, attn.head_dim), attn.n_rep).transpose(1, 2)
+            
+            # 計算注意力分數
+            scores = (q_reshaped @ k_reshaped.transpose(-2, -1)) / (attn.head_dim ** 0.5)
+            
+            # 檢查因果掩碼：確保未來信息不會泄露
+            # 對於每個位置i，它只能關注位置j<=i的token
+            for i in range(seq_len):
+                for j in range(i+1, seq_len):
+                    # 檢查未來位置的分數是否為負無窮大（掩碼後）
+                    mask_value = attn.mask[0, 0, i, j].item()
+                    assert mask_value == float('-inf'), f"位置({i},{j})的掩碼值應為負無窮大，實際為{mask_value}"
         
-        # 移除hooks
-        q_hook.remove()
-        k_hook.remove()
-        v_hook.remove()
+        finally:
+            # 移除hooks
+            q_hook.remove()
+            k_hook.remove()
+            v_hook.remove()
+            
+    def test_edge_cases(self, tiny_config):
+        """測試邊緣情況，如極短序列和n_heads=n_kv_heads的特例"""
+        # 測試極短序列（單個token）
+        bs = 2
+        single_token = torch.randn(bs, 1, tiny_config.dim)
+        single_pos = precompute_pos_cis(
+            dim=tiny_config.dim // tiny_config.n_heads, 
+            end=tiny_config.max_seq_len,
+            theta=tiny_config.rope_theta
+        )[:1]
         
-        # 驗證Query, Key, Value的形狀
-        assert len(query_list) == 1
-        assert len(key_list) == 1
-        assert len(value_list) == 1
+        attn = Attention(tiny_config)
+        output, cache = attn(single_token, single_pos, use_cache=True)
         
-        q = query_list[0]
-        k = key_list[0]
-        v = value_list[0]
+        # 檢查單個token的輸出形狀
+        assert output.shape == single_token.shape
+        assert cache[0].shape == (bs, 1, tiny_config.n_kv_heads, attn.head_dim)
         
-        # 檢查Q, K, V的形狀
-        assert q.shape == (bs, seq_len, tiny_config.n_heads * attn.head_dim)
-        assert k.shape == (bs, seq_len, tiny_config.n_kv_heads * attn.head_dim)
-        assert v.shape == (bs, seq_len, tiny_config.n_kv_heads * attn.head_dim) 
+        # 測試n_heads=n_kv_heads的特例（無需重複KV）
+        equal_heads_config = LMConfig(
+            dim=64, 
+            n_heads=2, 
+            n_kv_heads=2,  # 相等的頭數
+            max_seq_len=32,
+            flash_attn=False,
+            dropout=0.0
+        )
+        
+        equal_attn = Attention(equal_heads_config)
+        assert equal_attn.n_rep == 1  # 無需重複
+        
+        # 確認前向傳播正常工作
+        sample = torch.randn(bs, 4, equal_heads_config.dim)
+        sample_pos = precompute_pos_cis(
+            dim=equal_heads_config.dim // equal_heads_config.n_heads, 
+            end=equal_heads_config.max_seq_len,
+            theta=equal_heads_config.rope_theta
+        )[:4]
+        
+        output, _ = equal_attn(sample, sample_pos)
+        assert output.shape == sample.shape 

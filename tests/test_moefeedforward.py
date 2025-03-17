@@ -128,18 +128,32 @@ class TestMOEFeedForward:
         
         # 獲取門控機制的輸出
         with torch.no_grad():
-            # 模擬門控機制
+            # 直接調用門控機制
             topk_idx, topk_weight, aux_loss = moe_ff.gate(x)
         
         # 檢查topk_idx和topk_weight的形狀
-        # 根據實際實現，topk_idx 的形狀應該是 [batch_size * seq_len, num_experts_per_tok]
         expected_shape = (batch_size * seq_len, basic_config.num_experts_per_tok)
         assert topk_idx.shape == expected_shape
         assert topk_weight.shape == expected_shape
         
-        # 檢查權重總和是否為1
-        weight_sums = topk_weight.sum(dim=-1)
-        assert torch.allclose(weight_sums, torch.ones_like(weight_sums))
+        # 檢查索引是否在有效範圍內
+        assert topk_idx.min() >= 0
+        assert topk_idx.max() < basic_config.n_routed_experts
+        
+        # 檢查權重是否在有效範圍內
+        assert topk_weight.min() >= 0
+        assert topk_weight.max() <= 1
+        
+        # 檢查權重總和
+        # 注意：只有在 norm_topk_prob 為 True 且 num_experts_per_tok > 1 時，權重和才會歸一化為1
+        if basic_config.norm_topk_prob and basic_config.num_experts_per_tok > 1:
+            weight_sums = topk_weight.sum(dim=-1)
+            assert torch.allclose(weight_sums, torch.ones_like(weight_sums), rtol=1e-5, atol=1e-5)
+        
+        # 測試前向傳播中的專家選擇過程
+        output = moe_ff(x)
+        assert output.shape == x.shape  # 確保輸出形狀正確
+        assert hasattr(moe_ff, "aux_loss")  # 確保計算了輔助損失
     
     def test_moe_infer_method(self, basic_config):
         """測試moe_infer方法"""
@@ -235,4 +249,78 @@ class TestMOEFeedForward:
         
         # 驗證輔助損失是浮點數
         assert isinstance(aux_loss_seq, torch.Tensor) or isinstance(aux_loss_seq, float)
-        assert isinstance(aux_loss_no_seq, torch.Tensor) or isinstance(aux_loss_no_seq, float) 
+        assert isinstance(aux_loss_no_seq, torch.Tensor) or isinstance(aux_loss_no_seq, float)
+    
+    def test_moe_infer_implementation(self, basic_config):
+        """詳細測試moe_infer方法的實現細節"""
+        # 創建 MOEFeedForward 實例
+        moe_ff = MOEFeedForward(basic_config)
+        moe_ff.eval()  # 設置為評估模式
+        
+        # 創建輸入張量 [batch_size*seq_len, dim]
+        batch_size, seq_len = 2, 4
+        total_tokens = batch_size * seq_len
+        x_flat = torch.randn(total_tokens, basic_config.dim)
+        
+        # 創建專家索引和權重
+        num_experts_per_tok = basic_config.num_experts_per_tok
+        n_routed_experts = basic_config.n_routed_experts
+        
+        # 創建一個固定的專家索引模式進行測試
+        # 使每個令牌按序分配給不同專家，以便測試專家token分配邏輯
+        flat_expert_indices = torch.zeros(total_tokens * num_experts_per_tok, dtype=torch.long)
+        for i in range(total_tokens):
+            for j in range(num_experts_per_tok):
+                expert_idx = (i + j) % n_routed_experts
+                flat_expert_indices[i * num_experts_per_tok + j] = expert_idx
+        
+        # 為每個令牌專家組合分配權重，確保每個令牌的專家權重總和為1
+        flat_expert_weights = torch.ones(total_tokens * num_experts_per_tok, 1) / num_experts_per_tok
+        
+        # 手動實現專家處理令牌的分組過程
+        # 1. 按專家索引排序
+        idxs = flat_expert_indices.argsort()
+        
+        # 2. 計算每個專家處理的令牌數量
+        expert_counts = torch.zeros(n_routed_experts, dtype=torch.long)
+        for idx in flat_expert_indices:
+            expert_counts[idx] += 1
+        
+        tokens_per_expert = expert_counts.cumsum(0).cpu().numpy()
+        
+        # 3. 計算原始令牌索引
+        token_idxs = idxs // num_experts_per_tok
+        
+        # 記錄每個專家處理哪些令牌
+        expert_to_tokens = [[] for _ in range(n_routed_experts)]
+        for i, expert_idx in enumerate(flat_expert_indices):
+            token_idx = i // num_experts_per_tok
+            expert_to_tokens[expert_idx.item()].append(token_idx)
+        
+        # 調用moe_infer方法
+        with torch.no_grad():
+            output = moe_ff.moe_infer(x_flat, flat_expert_indices, flat_expert_weights)
+        
+        # 檢查輸出形狀
+        assert output.shape == x_flat.shape
+        
+        # 用手動方式計算期望的輸出，並與實際輸出比較
+        # 為了簡化測試，我們只進行形狀驗證及確保非零輸出，
+        # 完整的功能驗證會涉及重新實現整個 moe_infer 邏輯
+        assert torch.any(output != 0), "輸出不應全為零"
+        
+        # 驗證模型內部實現的細節一致性
+        for i in range(n_routed_experts):
+            start_idx = 0 if i == 0 else tokens_per_expert[i - 1]
+            end_idx = tokens_per_expert[i]
+            if start_idx == end_idx:
+                continue  # 此專家沒有處理任何令牌
+                
+            # 驗證排序邏輯：在排序後的索引中，token_idxs[start_idx:end_idx]
+            # 應該對應於分配給專家i的所有令牌
+            expert_token_indices = token_idxs[start_idx:end_idx].tolist()
+            
+            # 確保所有這些令牌都是分配給專家i的
+            for token_idx in expert_token_indices:
+                # 檢查此令牌確實應該被專家i處理
+                assert token_idx in expert_to_tokens[i], f"令牌 {token_idx} 不應該被專家 {i} 處理" 

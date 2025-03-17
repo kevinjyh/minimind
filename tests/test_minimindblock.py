@@ -116,10 +116,9 @@ class TestMiniMindBlock:
         assert past_kv is None  # 當use_cache=False時，past_kv應為None
     
     def test_forward_with_cache(self, basic_block, sample_input):
-        """測試啟用緩存的前向傳播"""
+        """測試啟用緩存的前向傳播，支持GQA模式"""
         x, pos_cis = sample_input
         batch_size, seq_len, dim = x.shape
-        head_dim = dim // basic_block.n_heads
         
         # 執行啟用緩存的前向傳播
         output, past_kv = basic_block(x, pos_cis, past_key_value=None, use_cache=True)
@@ -131,10 +130,40 @@ class TestMiniMindBlock:
         assert past_kv is not None
         assert len(past_kv) == 2  # 包含key和value兩個緩存
         
-        # 檢查key緩存形狀
-        k_cache = past_kv[0]
-        assert k_cache.shape[0] == batch_size  # 批次大小
-        # 形狀可能因模型配置而異，但應該包含序列長度和頭數維度
+        # 檢查緩存形狀是否符合GQA模式
+        k_cache, v_cache = past_kv
+        n_kv_heads = basic_block.attention.n_local_kv_heads
+        head_dim = basic_block.head_dim
+        
+        # 緩存形狀應為 [batch_size, seq_len, n_kv_heads, head_dim]
+        expected_cache_shape = (batch_size, seq_len, n_kv_heads, head_dim)
+        assert k_cache.shape == expected_cache_shape, f"Key緩存形狀不符, 期望: {expected_cache_shape}, 實際: {k_cache.shape}"
+        assert v_cache.shape == expected_cache_shape, f"Value緩存形狀不符, 期望: {expected_cache_shape}, 實際: {v_cache.shape}"
+        
+        # 測試緩存增量更新
+        # 創建一個新的單個token輸入，模擬自回歸生成
+        new_token = torch.randn(batch_size, 1, dim)
+        new_pos_cis = pos_cis[:1]  # 只用第一個位置的編碼
+        
+        # 使用先前的緩存進行前向傳播
+        new_output, new_past_kv = basic_block(new_token, new_pos_cis, past_key_value=past_kv, use_cache=True)
+        
+        # 檢查新輸出形狀
+        assert new_output.shape == (batch_size, 1, dim)
+        
+        # 檢查更新後的緩存
+        assert new_past_kv is not None
+        assert len(new_past_kv) == 2
+        
+        # 新緩存應該包含原始序列加上新token
+        new_k_cache, new_v_cache = new_past_kv
+        expected_new_cache_shape = (batch_size, seq_len + 1, n_kv_heads, head_dim)
+        assert new_k_cache.shape == expected_new_cache_shape
+        assert new_v_cache.shape == expected_new_cache_shape
+        
+        # 驗證緩存的連續性：新緩存的前seq_len部分應該與舊緩存相同
+        assert torch.allclose(new_k_cache[:, :seq_len, :, :], k_cache)
+        assert torch.allclose(new_v_cache[:, :seq_len, :, :], v_cache)
     
     def test_residual_connection(self, basic_block, sample_input):
         """測試殘差連接的作用"""
