@@ -24,7 +24,7 @@ torch.manual_seed(42)
 np.random.seed(42)
 
 # 創建輸出目錄
-OUTPUT_DIR = Path("tests/visualization_output")
+OUTPUT_DIR = Path("tests/model/visualization_output")
 OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 
 # 設置中文字體以確保圖表正確顯示中文

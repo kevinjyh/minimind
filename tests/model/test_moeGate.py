@@ -314,7 +314,7 @@ class TestMoEGate:
         topk_idx, topk_weight, aux_loss = moe_gate(hidden_states)
         
         # 將結果寫入文件
-        with open('tests/moe_gate_visualization.txt', 'w', encoding='utf-8') as f:
+        with open('tests/model/moe_gate/visualization.txt', 'w', encoding='utf-8') as f:
             f.write(f"\n{'='*80}\n")
             f.write(f"MoEGate配置:\n")
             f.write(f"總專家數量 (n_routed_experts): {default_config.n_routed_experts}\n")
@@ -371,7 +371,7 @@ class TestMoEGate:
                 f.write(f"專家{i}: 被選中{expert_counts[i]:.0f}次, 佔比{percentage:.2f}%\n")
         
         # 仍然保留打印輸出
-        print(f"\n結果已寫入 tests/moe_gate_visualization.txt")
+        print(f"\n結果已寫入 tests/model/moe_gate/visualization.txt")
             
         # 確保測試通過
         assert topk_idx.shape == (batch_size * seq_len, default_config.num_experts_per_tok)
@@ -392,7 +392,7 @@ class TestMoEGate:
         results = []
         
         # 將結果寫入文件
-        with open('tests/moe_gate_aux_loss_comparison.txt', 'w', encoding='utf-8') as f:
+        with open('tests/model/moe_gate/aux_loss_comparison.txt', 'w', encoding='utf-8') as f:
             f.write(f"\n{'='*80}\n")
             f.write("測試不同輔助損失權重對專家分配的影響\n")
             
@@ -443,7 +443,7 @@ class TestMoEGate:
                 f.write(f"{topk_weight}\n")
         
         # 仍然保留打印輸出
-        print(f"\n結果已寫入 tests/moe_gate_aux_loss_comparison.txt")
+        print(f"\n結果已寫入 tests/model/moe_gate/aux_loss_comparison.txt")
         
         # 確保測試通過
         assert len(results) == len(aux_weights)
