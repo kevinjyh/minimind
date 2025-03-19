@@ -5,6 +5,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 import os
+import sys
+
+# 修正：添加專案根目錄到系統路徑
+root_dir = str(Path(__file__).parent.parent.parent.absolute())
+sys.path.insert(0, root_dir)  # 使用insert(0)確保優先搜索
 
 from model.model import MiniMindLM, apply_rotary_emb, repeat_kv
 from model.LMConfig import LMConfig

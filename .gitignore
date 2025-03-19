@@ -8,6 +8,13 @@ __pycache__/
 .venv/
 venv/
 
+# 3/19起忽略特定的輸出目錄，保留以前push的版本即可
+/tests/model/generation_output/
+/tests/model/minimindblock_visualization/
+/tests/model/moe_gate/
+/tests/model/visualization_output/
+
+# 忽略其他不需要的文件
 /dataset
 /out
 poetry.lock

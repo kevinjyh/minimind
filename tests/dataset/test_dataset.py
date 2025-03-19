@@ -5,8 +5,8 @@ import os
 from pathlib import Path
 from unittest.mock import patch, mock_open
 
-# 添加專案根目錄到系統路徑
-sys.path.append(str(Path(__file__).parent.parent.parent))
+# 修正：使用 insert(0) 確保優先搜索，並使用 absolute() 確保絕對路徑
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.absolute()))
 
 from model.dataset import PretrainDataset  # 修正為實際的類名
 

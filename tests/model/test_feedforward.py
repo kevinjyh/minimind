@@ -1,5 +1,12 @@
 import torch
 import torch.nn.functional as F
+import sys
+from pathlib import Path
+
+# 修正：添加專案根目錄到系統路徑
+root_dir = str(Path(__file__).parent.parent.parent.absolute())
+sys.path.insert(0, root_dir)  # 使用insert(0)確保優先搜索
+
 from model.LMConfig import LMConfig
 from model.model import FeedForward
 

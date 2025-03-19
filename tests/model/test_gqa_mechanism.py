@@ -6,9 +6,11 @@ import os
 from pathlib import Path
 import math
 
-# 添加根目錄到系統路徑
-root_dir = str(Path(__file__).parent.parent.absolute())
-sys.path.append(root_dir)
+# 修正：正確計算專案根目錄
+# 測試文件路徑：tests/model/test_gqa_mechanism.py
+# 需要向上三層父目錄才能到專案根目錄
+root_dir = str(Path(__file__).parent.parent.parent.absolute())  # 關鍵修正：多一層.parent
+sys.path.insert(0, root_dir)  # 使用 insert(0) 確保優先搜索
 
 from model.model import Attention, precompute_pos_cis, repeat_kv, apply_rotary_emb
 from model.LMConfig import LMConfig

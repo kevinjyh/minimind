@@ -4,6 +4,13 @@ import torch.nn.functional as F
 import math
 import pytest
 import numpy as np
+import sys
+from pathlib import Path
+
+# 注意：這個測試文件使用的是獨立的注意力實現，不依賴專案目錄
+# 但為了保持一致性，仍添加系統路徑設置
+root_dir = str(Path(__file__).parent.parent.parent.absolute())
+sys.path.insert(0, root_dir)  # 使用insert(0)確保優先搜索
 
 class SimpleAttention(nn.Module):
     """簡化版的自注意力機制，用於理解核心原理"""
