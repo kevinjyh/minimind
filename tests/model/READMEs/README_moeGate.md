@@ -1,9 +1,11 @@
 # MoEGate 測試說明文檔
 
 ## 提示詞
+
 請以 pytest 測試案例的模式，針對 `class MoEGate` 寫下測試源碼，並將測試源碼檔寫入 `本專案根目錄\tests\test_moe.py` 中。
 
 另外將以下主題創建並寫入 `tests\README_moe.md` 中：
+
 - 各測試案例功能及作用
 - 以研究 `class MoEGate` 代碼各功能的角度，寫下如何調整測試案例的各參數，以增加學習該類別代碼的知識
 - 以研究 `class MoEGate` 代碼各功能的角度，寫下如何由淺入深的順序來研讀測試案例檔案或方式。
@@ -55,6 +57,7 @@ def many_experts_config(self):
 ```
 
 通過增加專家總數和每個 token 選擇的專家數量，可以觀察：
+
 - 路由決策如何分散到更多專家
 - 輔助損失如何平衡更多專家的負載
 - 計算開銷的變化
@@ -77,6 +80,7 @@ def high_aux_loss_config(self):
 ```
 
 通過調整輔助損失權重，可以觀察：
+
 - 較大的權重如何影響專家的負載均衡
 - 路由決策的多樣性變化
 - 權重過大是否會導致不穩定
@@ -100,6 +104,7 @@ def test_large_batch(self, default_config, set_seed):
 ```
 
 通過測試不同大小的輸入，可以了解：
+
 - 批次大小和序列長度如何影響輔助損失計算
 - 在大規模輸入下的專家選擇分佈
 - 性能和內存使用隨輸入大小的變化
@@ -118,17 +123,17 @@ def test_large_batch(self, default_config, set_seed):
 
 ### 第二階段：特殊配置和模式
 
-4. **test_single_expert**：理解最簡單的情況（每個 token 只選一個專家）
-5. **test_no_aux_loss**：了解沒有輔助損失時的行為
-6. **test_train_vs_eval_mode**：了解訓練和評估模式的差異
-7. **test_no_norm_topk**：理解 top-k 概率歸一化的作用
+1. **test_single_expert**：理解最簡單的情況（每個 token 只選一個專家）
+2. **test_no_aux_loss**：了解沒有輔助損失時的行為
+3. **test_train_vs_eval_mode**：了解訓練和評估模式的差異
+4. **test_no_norm_topk**：理解 top-k 概率歸一化的作用
 
 這些測試幫助理解特殊配置下的行為，突顯重要參數的影響。
 
 ### 第三階段：深入理解高級功能
 
-8. **test_token_aux_loss**：深入理解不同類型輔助損失的實現
-9. **test_expert_load_balancing**：掌握負載均衡機制的工作原理
+1. **test_token_aux_loss**：深入理解不同類型輔助損失的實現
+2. **test_expert_load_balancing**：掌握負載均衡機制的工作原理
 
 這些測試涉及 `MoEGate` 的核心功能 — 負載均衡和不同類型的輔助損失。
 
@@ -156,7 +161,7 @@ def visualize_expert_distribution(topk_idx, n_experts):
     plt.savefig('expert_distribution.png')
 ```
 
-通過這種漸進式和實驗性的學習方法，可以從不同角度全面理解 `MoEGate` 類的設計和實現。 
+通過這種漸進式和實驗性的學習方法，可以從不同角度全面理解 `MoEGate` 類的設計和實現。
 
 ## MoEGate 輸出的深入解析
 
@@ -185,7 +190,7 @@ def visualize_expert_distribution(topk_idx, n_experts):
 
 從 `test_visualize_moe_gate_outputs` 測試中獲得的結果展示了這些輸出的實際值：
 
-```
+```text
 topk_idx 具體值示例:
 tensor([[2, 1],
         [2, 3],
@@ -212,6 +217,7 @@ tensor([[0.7879, 0.2121],
 ```
 
 從這些值我們可以觀察到：
+
 - 第一個token選擇了專家2和專家1，權重分別為0.7879和0.2121
 - 每個token的專家選擇是獨立的，基於該token的特徵
 - 每行權重總和為1，表示token的處理完全分配給了選定的專家
@@ -230,12 +236,12 @@ tensor([[0.7879, 0.2121],
 
 3. **信息論角度**：[詳細說明](../learning-notes/discussions/為何aux_loss是純量.md)
    - 從信息論的角度來看，`aux_loss` 作為純量是很自然的：
-     * 它代表了實際專家使用分布與理想均勻分布之間的差異度量
-     * 常用 KL 散度或交叉熵等方法來計算這種差異
-     * 這些方法通過求和操作（Σ）將分布差異壓縮成單一數值
+     - 它代表了實際專家使用分布與理想均勻分布之間的差異度量
+     - 常用 KL 散度或交叉熵等方法來計算這種差異
+     - 這些方法通過求和操作（Σ）將分布差異壓縮成單一數值
    - 計算公式示例：
-     * KL散度：KL(P||Q) = Σ P(x) * log(P(x)/Q(x))
-     * 其中 P(x) 是實際的專家使用分布，Q(x) 是理想的均勻分布
+     - KL散度：KL(P||Q) = Σ P(x) * log(P(x)/Q(x))
+     - 其中 P(x) 是實際的專家使用分布，Q(x) 是理想的均勻分布
 
 4. **優勢**：
    - 可比較性：不同批次之間的輔助損失可以直接比較
@@ -258,6 +264,7 @@ tensor([[0.7879, 0.2121],
 | 1.0 | 專家0: 16.67%, 專家1: 8.33%, 專家2: 41.67%, 專家3: 33.33% | 173.61 | 極高權重可能導致不穩定 |
 
 這些觀察表明：
+
 - 適度的輔助損失權重（如0.1）能有效促進專家負載均衡
 - 過高的權重可能反而導致過度補償，產生新的不平衡
 - 選擇合適的權重值對模型性能至關重要
@@ -301,11 +308,12 @@ tensor([[0.7879, 0.2121],
 
 通過這些實驗，可以獲得對MoEGate工作原理的更深入理解，並針對特定應用場景進行優化調整。
 
-
 ### 假設情境
+
 為了舉出 `topk_idx`, `topk_weight`, 和 `aux_loss` 的實際數值範例，我們可以根據 `hidden_dim=5` 的情況，假設一些合理的輸出。這些數值將基於我們對 `MoEGate` 的理解，而不需要實際運行 `moe_gate.forward(hidden_states)`。
 
 假設我們的模型配置如下：
+
 - `batch_size = 2`
 - `seq_len = 3`
 - `num_experts_per_tok = 2`（每個token選擇2個專家）

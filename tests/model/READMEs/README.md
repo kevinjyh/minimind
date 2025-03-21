@@ -4,7 +4,7 @@
 
 ## 測試目錄結構
 
-```
+```text
 tests/
   ├── model/                 # model.py 相關測試
   │   ├── test_attention.py      # 注意力機制測試
@@ -75,16 +75,21 @@ class Test目標類:
 ## 常見問題
 
 ### Q: 測試無法導入模塊?
+
 A: 確保測試文件中包含正確的導入路徑：
+
 ```python
 sys.path.append(str(Path(__file__).parent.parent.parent))
 ```
 
 ### Q: 如何跳過特定測試?
+
 A: 使用 `@pytest.mark.skip(reason="原因")` 裝飾器
 
 ### Q: 如何運行一組特定的測試?
+
 A: 在 TEST EXPLORER 中選擇特定模塊或在命令行中使用：
+
 ```bash
 python -m pytest tests/model/test_attention.py -v
-``` 
+```

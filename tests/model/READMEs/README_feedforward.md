@@ -46,7 +46,7 @@ python tests/test_feedforward.py
 
 測試成功後，你應該會看到類似以下的輸出：
 
-```
+```text
 ......
 ----------------------------------------------------------------------
 Ran 7 tests in X.XXs
@@ -59,6 +59,7 @@ OK
 ## 常見問題及解決方案
 
 1. **導入錯誤**：如果遇到模塊導入錯誤，請確保你的 Python 路徑中包含專案根目錄。
+
    ```bash
    # 在專案根目錄下執行
    export PYTHONPATH=$PYTHONPATH:$(pwd)  # Linux/Mac
@@ -66,12 +67,14 @@ OK
    ```
 
 2. **CUDA 相關錯誤**：如果測試在 GPU 上運行時發生錯誤，可以嘗試將測試限制在 CPU 上：
+
    ```python
    # 在測試開始前添加
    torch.cuda.is_available = lambda: False
    ```
 
 3. **失去確定性**：如果對比測試結果不一致，請確保在相關測試中設置了隨機種子：
+
    ```python
    torch.manual_seed(42)
-   ``` 
+   ```

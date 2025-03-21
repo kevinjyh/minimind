@@ -1,6 +1,7 @@
-### logits 形狀驗證與模型架構理解
+# logits 形狀驗證與模型架構理解
 
-#### 測試案例解析
+## 測試案例解析
+
 ```python
 assert output.logits.shape == (2, 10, small_model.vocab_size)
 ```
@@ -12,11 +13,13 @@ assert output.logits.shape == (2, 10, small_model.vocab_size)
 | vocab_size | 詞表大小 | 每個位置預測所有可能 token 的機率分佈 |
 
 **檢查目的**：
+
 1. 保持批次結構完整性
 2. 確保序列位置對齊
 3. 驗證輸出層投影正確性
 
-#### 理解斷層分析
+## 理解斷層分析
+
 ```mermaid
 graph TD
     A[輸入形狀 batch x seq_len] --> B[詞嵌入轉換]
@@ -26,6 +29,7 @@ graph TD
 ```
 
 可能存在的理解缺口：
+
 1. **張量流動機制**
    - 未清楚追蹤從 `(batch, seq_len)` 到 `(batch, seq_len, dim)` 的轉換過程
    - 對 RoPE 位置編碼如何融入注意力計算缺乏直觀理解
@@ -38,7 +42,7 @@ graph TD
    - 忽略 `output = nn.Linear(dim, vocab_size)` 的維度轉換意義
    - 未理解共享權重機制（`tok_embeddings.weight = output.weight`）
 
-#### 學習路徑規劃
+## 學習路徑規劃
 
 ```python
 # 三階段學習框架
@@ -50,7 +54,9 @@ learning_phases = [
 ```
 
 **具體實施方法**：
+
 1. 建立形變追蹤表
+
    | 層級 | 輸入形狀 | 輸出形狀 | 關鍵操作 |
    |------|---------|---------|---------|
    | 詞嵌入 | (2,10) | (2,10,128) | Embedding lookup |
@@ -59,6 +65,7 @@ learning_phases = [
    | 輸出層 | (2,10,128) | (2,10,1000) | 線性投影 |
 
 2. 設計診斷實驗
+
    ```python
    # 追蹤單一 token 的處理流程
    debug_input = torch.tensor([[1]])  # 批次大小1，序列長度1
@@ -72,7 +79,8 @@ learning_phases = [
    print(f"最終logits: {logits.shape}")
    ```
 
-#### 推薦驗證工具
+## 推薦驗證工具
+
 | 工具類型 | 推薦方案 | 應用場景 |
 |---------|---------|---------|
 | 可視化 | Netron | 模型架構檢視 |
@@ -80,7 +88,8 @@ learning_phases = [
 | 分析 | torchinfo | 形狀驗證 |
 | 監控 | Weights & Biases | 訓練過程追蹤 |
 
-#### 常見誤區提醒
+## 常見誤區提醒
+
 1. **序列長度混淆**  
    誤解：認為輸出序列長度會比輸入短  
    正解：自回歸模型保持相同序列長度，每個位置預測下個 token
@@ -91,11 +100,12 @@ learning_phases = [
 
 3. **緩存機制影響**  
    誤解：`past_key_values` 會改變 logits 形狀  
-   正解：緩存僅影響計算效率，不改變輸出形狀結構 
+   正解：緩存僅影響計算效率，不改變輸出形狀結構
 
 ### logits 深度解析
 
 #### 核心概念定義
+
 ```python
 # 典型語言模型輸出結構
 logits = model_output.logits  # shape: (batch, seq_len, vocab_size)
@@ -109,10 +119,13 @@ probs = F.softmax(logits, dim=-1)
 | probabilities | $\mathbf{p} = \text{softmax}(\mathbf{z})$ | `F.softmax(logits)` | 正規化的機率分佈 |
 
 #### 實例驗證
+
 假設詞表為 `["紅", "橙", "黃", "綠", "藍", "紫"]`，模型輸出：
+
 ```python
 logits = torch.tensor([1.11, 2.22, 3.33, 4.44, 5.55, 6.66])
 ```
+
 ```mermaid
 graph LR
     A[最高 logit 值 6.66] --> B[對應索引 5]

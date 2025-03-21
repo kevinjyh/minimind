@@ -4,7 +4,7 @@
 
 MiniMind是一個極小型語言模型專案，其核心理念是"大道至簡"—用最小的模型實現基本的大型語言模型功能。這個專案旨在讓任何人都能用極低的成本（甚至只需3元人民幣和2小時）從零開始訓練一個能夠對話的語言模型。
 
-### 專案主要特點：
+### 專案主要特點
 
 1. **極小模型體積**：最小版本僅為25.8M，是GPT-3的1/7000大小
 2. **低訓練成本**：單卡3090顯卡即可訓練
@@ -12,7 +12,7 @@ MiniMind是一個極小型語言模型專案，其核心理念是"大道至簡"�
 4. **原生實現**：核心算法全部使用PyTorch從零實現，不依賴第三方庫的抽象接口
 5. **多種模型變種**：提供Dense模型和MoE（混合專家）模型兩種架構
 
-### 核心功能模塊：
+### 核心功能模塊
 
 1. **數據處理**：
    - Tokenizer訓練與應用
@@ -56,6 +56,7 @@ MiniMind是一個極小型語言模型專案，其核心理念是"大道至簡"�
 以下是針對你背景和學習目標設計的研究路線圖，總計約12週：
 
 ### 第1-2週：基礎理解與環境準備
+
 - 閱讀項目README，理解整體架構
 - 準備Python環境和必要庫
 - 熟悉PyTorch基礎操作
@@ -63,30 +64,35 @@ MiniMind是一個極小型語言模型專案，其核心理念是"大道至簡"�
 - 搭建訓練環境，下載預處理好的數據
 
 ### 第3-4週：模型架構與數據處理
+
 - 學習MiniMind的模型結構(./model/)
 - 理解分詞器(Tokenizer)的工作原理
 - 研究數據處理流程，包括清洗和格式化
 - 嘗試運行評估腳本，熟悉模型效果
 
 ### 第5-6週：預訓練與監督微調
+
 - 深入研究預訓練(train_pretrain.py)代碼
 - 理解監督微調(train_full_sft.py)實現
 - 嘗試小規模訓練(可使用較小的數據集)
 - 分析訓練loss曲線，理解模型學習過程
 
 ### 第7-8週：LoRA微調技術
+
 - 學習LoRA原理與實現(model_lora.py)
 - 研究LoRA微調過程(train_lora.py)
 - 嘗試自定義數據集進行LoRA微調
 - 對比全參數微調與LoRA微調的效果差異
 
 ### 第9-10週：DPO強化學習演算法
+
 - 研究DPO原理與實現(train_dpo.py)
 - 理解人類反饋數據的格式與處理
 - 理解DPO訓練流程與實現細節
 - 嘗試運行小規模DPO訓練實驗
 
 ### 第11-12週：模型蒸餾與綜合應用
+
 - 學習知識蒸餾原理(train_distillation.py)
 - 研究白盒/黑盒蒸餾的區別與實現
 - 嘗試將不同階段的技術整合應用
@@ -95,21 +101,25 @@ MiniMind是一個極小型語言模型專案，其核心理念是"大道至簡"�
 ## 學習代碼檔案路徑(由淺入深)
 
 ### 1. 基礎結構和工具
+
 - `model/LMConfig.py` - 模型配置參數定義
 - `scripts/train_tokenizer.py` - 分詞器訓練代碼
 - `eval_model.py` - 模型評估代碼
 - `scripts/web_demo.py` - WebUI演示界面
 
 ### 2. 模型架構
+
 - `model/model.py` - 基礎模型架構（含 RMSNorm、Attention、FeedForward 和 MoE 實現）
 - ~~`dataset/tokenize.py` - 分詞處理相關代碼~~
 
 ### 3. 基礎訓練流程
+
 - `train_pretrain.py` - 預訓練實現
 - `train_full_sft.py` - 監督微調實現
 - `model\dataset.py` - 數據載入與處理
 
 ### 4. 進階訓練技術
+
 - `model/model_lora.py` - LoRA模型架構
 - `train_lora.py` - LoRA微調訓練
 - `train_dpo.py` - DPO強化學習訓練
@@ -117,6 +127,7 @@ MiniMind是一個極小型語言模型專案，其核心理念是"大道至簡"�
 - `train_distill_reason.py` - 推理能力蒸餾訓練
 
 ### 5. 推理與部署
+
 - `scripts/convert_model.py` - 模型轉換工具
 - `scripts/serve_openai_api.py` - OpenAI兼容API服務
 - `scripts/chat_openai_api.py` - API調用示例

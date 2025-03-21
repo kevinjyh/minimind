@@ -3,13 +3,14 @@
 本文檔提供了關於 `MOEFeedForward` 類的測試案例說明，旨在幫助理解混合專家模型 (Mixture of Experts, MoE) 在前饋網絡中的實現原理和工作機制。
 
 ## 我在Cursor的提問詞
+
 我想透過 pytest 測試案例的方式來完全理解 `class MOEFeedForward` 的代碼原理及功能，請依以下需求完成我的這個目的：
 
 - 以 pytest 測試的模式，並將測試源碼檔寫入 `本專案根目錄\tests\` 下。
 - 將以下主題創建並寫入 `tests\`下適當的 READMD 檔案：
-    - 各測試案例功能及作用
-    - 以研究代碼各功能的角度，寫下如何調整測試案例的各參數，以深入理解該類別代碼
-    - 以研究代碼各功能的角度，寫下如何由淺入深的順序來研讀測試案例或方式。
+  - 各測試案例功能及作用
+  - 以研究代碼各功能的角度，寫下如何調整測試案例的各參數，以深入理解該類別代碼
+  - 以研究代碼各功能的角度，寫下如何由淺入深的順序來研讀測試案例或方式。
 
 ## 測試案例功能及作用
 
@@ -66,7 +67,7 @@
 
 2. **共享專家影響**
    - 對比測試有無共享專家的情況，以了解共享專家的作用
-   
+
    ```python
    # 有共享專家
    config_with_shared = LMConfig(n_shared_experts=True, ...)
@@ -77,7 +78,7 @@
 3. **輔助損失計算方式**
    - 調整 `seq_aux` 參數，可以比較序列級和標記級輔助損失計算的差異
    - 調整 `aux_loss_alpha` 參數，觀察輔助損失權重對結果的影響
-   
+
    ```python
    # 序列級輔助損失
    config_seq_aux = LMConfig(seq_aux=True, aux_loss_alpha=0.1, ...)
@@ -87,7 +88,7 @@
 
 4. **不同輸入大小測試**
    - 嘗試不同的批次大小和序列長度，觀察模型如何處理不同形狀的輸入
-   
+
    ```python
    # 修改 batch_size 和 seq_len
    batch_size, seq_len = 4, 8  # 嘗試不同組合
@@ -96,7 +97,7 @@
 
 5. **可視化參數調整**
    - 在可視化測試中，可以調整專家數量和每個標記選擇的專家數，觀察對負載均衡的影響
-   
+
    ```python
    expert_counts = [4, 8, 16]       # 嘗試不同專家數量
    experts_per_tok = [1, 2, 4]      # 嘗試不同的每標記專家數
@@ -164,18 +165,21 @@
 ## 補充說明
 
 要運行單個測試：
+
 ```bash
 pytest tests/test_moefeedforward.py::TestMOEFeedForward::test_init -v
 ```
 
 要運行所有測試：
+
 ```bash
 pytest tests/test_moefeedforward.py -v
 ```
 
 要運行可視化測試（注意：這些測試預設是被跳過的）：
+
 ```bash
 pytest tests/test_moefeedforward_visualization.py::TestMOEFeedForwardVisualization::test_visualize_expert_selection -v --no-skip
 ```
 
-每個測試案例都有詳細的文檔字符串，說明其目的和測試內容，可以通過閱讀這些文檔字符串獲取更多信息。 
+每個測試案例都有詳細的文檔字符串，說明其目的和測試內容，可以通過閱讀這些文檔字符串獲取更多信息。

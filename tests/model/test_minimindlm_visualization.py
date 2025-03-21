@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import os
 import sys
+from scipy.interpolate import make_interp_spline
 
 # 修正：添加專案根目錄到系統路徑
 root_dir = str(Path(__file__).parent.parent.parent.absolute())
@@ -102,11 +103,24 @@ class TestMiniMindLMVisualization:
         pos_cis = pos_cis[:50, :].reshape(50, -1)
         
         plt.figure(figsize=(10, 8))
-        plt.imshow(pos_cis, cmap='coolwarm')
-        plt.colorbar()
+        
+        # 繪製平滑曲線圖
+        for i in range(pos_cis.shape[1]):  # 遍歷每個編碼維度
+            # 使用插值來平滑曲線
+            x = np.arange(pos_cis.shape[0])  # 位置
+            y = pos_cis[:, i]  # 編碼值
+            
+            # 使用 B-spline 進行插值
+            spline = make_interp_spline(x, y)
+            x_smooth = np.linspace(0, pos_cis.shape[0] - 1, 300)  # 生成平滑的 x 值
+            y_smooth = spline(x_smooth)  # 獲取平滑的 y 值
+            
+            plt.plot(x_smooth, y_smooth, label=f"Dimension {i}")  # 繪製平滑曲線
+        
         plt.title("Position Encodings Visualization")
-        plt.xlabel("Encoding Dimension")
-        plt.ylabel("Position")
+        plt.xlabel("Position")
+        plt.ylabel("Encoding Value")
+        plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
         plt.savefig(OUTPUT_DIR / save_path)
         plt.close()
     

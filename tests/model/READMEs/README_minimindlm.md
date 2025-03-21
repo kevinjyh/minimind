@@ -3,13 +3,14 @@
 本文檔詳細說明了 `MiniMindLM` 類別的測試案例，這些測試案例旨在幫助您理解 `MiniMindLM` 的代碼原理及功能。通過這些測試，您可以深入了解模型的內部工作機制，包括初始化、前向傳播、生成過程等關鍵功能。
 
 ## 我的Cursor提示詞
+
 我想透過 pytest 測試案例的方式來完全理解 `class MiniMindLM` 的代碼原理及功能，請依以下需求完成我的這個目的：
 
 - 以 pytest 測試的模式，並將測試源碼檔寫入 `本專案根目錄\tests\` 下。
 - 將以下主題創建並寫入 `本專案根目錄\tests\` 下適當的 READMD 檔案：
-    - 各測試案例功能及作用
-    - 以研究代碼各功能的角度，寫下如何調整測試案例的各參數，以深入理解該類別代碼
-    - 以研究代碼各功能的角度，寫下如何由淺入深的順序來研讀測試案例或方式。
+  - 各測試案例功能及作用
+  - 以研究代碼各功能的角度，寫下如何調整測試案例的各參數，以深入理解該類別代碼
+  - 以研究代碼各功能的角度，寫下如何由淺入深的順序來研讀測試案例或方式。
 
 ## 測試文件概述
 
@@ -23,36 +24,44 @@
 ### 基本功能測試 (`test_minimindlm.py`)
 
 #### 模型初始化測試
+
 - `test_model_initialization`：測試模型初始化過程，檢查模型的基本屬性是否正確設置，包括詞彙表大小、層數、嵌入層和輸出層是否共享權重等。
 
 #### 前向傳播測試
+
 - `test_forward_pass`：測試模型的前向傳播功能，檢查輸出的形狀和結構是否符合預期。
 - `test_moe_forward_pass`：測試使用 Mixture of Experts (MoE) 的模型前向傳播，檢查輸出和輔助損失。
 
 #### 生成功能測試
+
 - `test_generate_without_stream`：測試非流式生成功能，驗證模型能夠一次性生成完整序列。
 - `test_generate_with_stream`：測試流式生成功能，驗證模型能夠逐步生成 token。
 - `test_eos_token_generation`：測試生成到 EOS 標記為止的功能。
 
 #### 快取機制測試
+
 - `test_use_cache`：測試模型的快取機制，驗證使用快取能夠加速生成過程。
 
 #### 採樣策略測試
+
 - `test_repetition_penalty`：測試重複懲罰機制，驗證不同懲罰參數對生成結果的影響。
 - `test_temperature_sampling`：測試溫度採樣策略，驗證不同溫度參數對生成結果的影響。
 - `test_top_p_sampling`：測試 top-p (nucleus) 採樣策略，驗證不同 top-p 參數對生成結果的影響。
 
 #### 批次處理測試
+
 - `test_batch_generation`：測試批次生成功能，驗證模型能夠同時處理多個輸入序列。
 
 ### 可視化測試 (`test_minimindlm_visualization.py`)
 
 #### 模型組件可視化
+
 - `visualize_token_embeddings`：可視化模型的 token 嵌入，幫助理解詞嵌入的分佈。
 - `visualize_position_encodings`：可視化模型的位置編碼，幫助理解位置信息的編碼方式。
 - `visualize_attention_weights`：可視化注意力權重，幫助理解模型如何關注不同位置的 token。
 
 #### 模型行為可視化
+
 - `visualize_layer_outputs`：可視化每一層的輸出，幫助理解信息在模型中的流動。
 - `visualize_logits_distribution`：可視化模型輸出的 logits 分佈，幫助理解模型的預測行為。
 - `visualize_generation_process`：可視化生成過程，幫助理解模型如何逐步生成 token。
@@ -179,4 +188,4 @@ self.visualize_generation_process(model, input_ids, max_new_tokens=5)
 
 5. **源碼對照**：將測試案例與 `model.py` 中的源碼對照閱讀，加深理解。
 
-通過系統地研究這些測試案例，您將能夠全面理解 `MiniMindLM` 類別的設計原理和實現細節，為進一步開發和優化模型奠定基礎。 
+通過系統地研究這些測試案例，您將能夠全面理解 `MiniMindLM` 類別的設計原理和實現細節，為進一步開發和優化模型奠定基礎。

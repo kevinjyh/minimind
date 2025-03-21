@@ -41,16 +41,20 @@ y = (y.view(*topk_weight.shape, -1) * topk_weight.unsqueeze(-1)).sum(dim=1)
 這行代碼實現了專家輸出的加權組合，包含三個主要步驟：
 
 1. **重塑張量 `y`**：
+
    ```python
    y.view(*topk_weight.shape, -1)
    ```
+
    - 將 `y` 張量重塑為與 `topk_weight` 相同的形狀，但保留最後一個維度
    - 如果 `topk_weight` 形狀為 `(batch_size, seq_len, num_experts_per_tok)`，則 `y` 會被重塑為 `(batch_size, seq_len, num_experts_per_tok, hidden_dim)`
 
 2. **擴展權重維度**：
+
    ```python
    topk_weight.unsqueeze(-1)
    ```
+
    - 在 `topk_weight` 的最後添加一個維度
    - 從 `(batch_size, seq_len, num_experts_per_tok)` 變為 `(batch_size, seq_len, num_experts_per_tok, 1)`
 
@@ -61,6 +65,7 @@ y = (y.view(*topk_weight.shape, -1) * topk_weight.unsqueeze(-1)).sum(dim=1)
      \text{result}[i, j, k] = \text{y_reshaped}[i, j, k] \times \text{weights_expanded}[i, j, 0]
      \]
    - 因此，乘法結果會是：
+
      ```python
      tensor([[[1.2, 2.4, 3.6],
               [1.2, 2.4, 3.6]],
@@ -68,12 +73,14 @@ y = (y.view(*topk_weight.shape, -1) * topk_weight.unsqueeze(-1)).sum(dim=1)
              [[2.4, 3.0, 3.6],
               [8.4, 10.5, 12.6]]])
      ```
+
    - 接下來，對乘法結果沿著維度 1 進行求和。維度 1 對應於 `y_reshaped` 和 `weights_expanded` 的第二個維度。
    - 具體來說，對於每個位置 `(i, k)`，計算如下：
      \[
      \text{result}[i, k] = \sum_{j=0}^{1} \text{乘法結果}[i, j, k]
      \]
    - 因此，求和結果會是：
+
      ```python
      [[2.4, 4.8, 7.2],
       [10.8, 13.5, 16.2]]
@@ -82,6 +89,7 @@ y = (y.view(*topk_weight.shape, -1) * topk_weight.unsqueeze(-1)).sum(dim=1)
 ### 數值示例
 
 假設有以下數據：
+
 ```python
 y = torch.tensor([[2.0, 4.0, 6.0],
                   [3.0, 6.0, 9.0],
@@ -95,9 +103,11 @@ topk_weight = torch.tensor([[0.6, 0.4],
 ```
 
 加權組合的過程：
+
 1. 重塑 `y`：`y_reshaped = y.view(*topk_weight.shape, -1)`
    - `topk_weight`形狀為`(2, 2)`
    - `y`形狀從`(4, 3)`變為：`(2, 2, 3)`
+
       ```python
       y_reshaped =
       tensor([[[2.0, 4.0, 6.0],
@@ -109,6 +119,7 @@ topk_weight = torch.tensor([[0.6, 0.4],
 
 2. 擴展權重：`weights_expanded = topk_weight.unsqueeze(-1)`
    - 形狀變為：`(2, 2, 1)`
+
    ```python
    tensor([[[0.6],
             [0.4]],
@@ -124,6 +135,7 @@ topk_weight = torch.tensor([[0.6, 0.4],
      \text{result}[i, j, k] = \text{y_reshaped}[i, j, k] \times \text{weights_expanded}[i, j, 0]
      \]
    - 因此，乘法結果會是：
+
      ```python
      tensor([[[1.2, 2.4, 3.6],
               [1.2, 2.4, 3.6]],
@@ -131,12 +143,14 @@ topk_weight = torch.tensor([[0.6, 0.4],
              [[2.4, 3.0, 3.6],
               [8.4, 10.5, 12.6]]])
      ```
+
    - 接下來，對乘法結果沿著維度 1 進行求和。維度 1 對應於 `y_reshaped` 和 `weights_expanded` 的第二個維度。
    - 具體來說，對於每個位置 `(i, k)`，計算如下：
      \[
      \text{result}[i, k] = \sum_{j=0}^{1} \text{乘法結果}[i, j, k]
      \]
    - 因此，求和結果會是：
+
      ```python
      [[2.4, 4.8, 7.2],
       [10.8, 13.5, 16.2]]
@@ -145,11 +159,13 @@ topk_weight = torch.tensor([[0.6, 0.4],
 ## 總結
 
 `MOEFeedForward` 在訓練模式下的操作主要包含三個步驟：
+
 1. 重複輸入數據以支持多專家處理
 2. 使用布爾索引收集各專家的輸出
 3. 通過加權組合將多個專家的輸出整合為最終結果
 
 這種設計使得模型能夠：
+
 - 動態選擇多個專家處理每個 token
 - 根據專家的權重進行靈活的輸出組合
-- 在訓練過程中學習最佳的路由策略 
+- 在訓練過程中學習最佳的路由策略

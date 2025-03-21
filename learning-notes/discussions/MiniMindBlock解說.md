@@ -67,4 +67,4 @@ class MiniMindBlock(nn.Module):
 
 ## 總結
 
-`MiniMindBlock` 類實現了 MiniMindLM 模型中的一個層，該層包含了注意力機制和前饋神經網絡，並使用殘差連接來增強模型的訓練效果。該層還支持使用過去的 key/value 緩存來加速推理過程。 
+`MiniMindBlock` 類實現了 MiniMindLM 模型中的一個層，該層包含了注意力機制和前饋神經網絡，並使用殘差連接來增強模型的訓練效果。該層還支持使用過去的 key/value 緩存來加速推理過程。

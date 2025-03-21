@@ -1,4 +1,4 @@
-## forward 函式整體解說: 
+# forward 函式整體解說
 
 ![structure](../../images/LLM-structure.png)
 
@@ -22,9 +22,7 @@ GQA 代表 Grouped Query Attention，是圖中展示的注意力機制實現：
 
 這個 GQA 區塊正是 `class Attention(nn.Module)` 在圖中的視覺化表示，展示了注意力機制在 MiniMind 模型中的內部實現細節。
 
-
 ==但是我研究 Attention.forward() 函式後，仍然無法將此函式中各代碼塊對應在截圖中的各個部份，請在 forward() 函式中加入可對應截圖各部位的註解==
-
 
 我已為 `Attention.forward()` 函式添加詳細註解，幫助您理解代碼與圖中各部分的對應關係。以下是主要對應點：
 
@@ -50,12 +48,11 @@ GQA 代表 Grouped Query Attention，是圖中展示的注意力機制實現：
 
 這些註解應該能幫助您更好地理解代碼與圖示之間的對應關係。
 
-
-## model.y(142-156) 的 `if...else` 判斷式解說：
+## model.y(142-156) 的 `if...else` 判斷式解說
 
 在 `Attention.forward()` 函式中，進行 mask 的部分使用了 `if...else` 判斷式，這兩個分支代表了不同的情況，具體如下：
 
-### 判斷式解釋：
+### 判斷式解釋
 
 1. **`if self.flash and seq_len != 1:`**
    - **情況**：當使用 Flash Attention 並且序列長度不等於 1 時。
@@ -71,19 +68,21 @@ GQA 代表 Grouped Query Attention，是圖中展示的注意力機制實現：
      - 應用 Dropout 以防止過擬合。
      - 最後，將注意力權重與值（`v`）進行矩陣乘法以獲得最終的輸出。
 
-### 總結：
+### 總結
+
 這兩個分支的主要區別在於是否使用 Flash Attention 來進行高效的注意力計算。當使用 Flash Attention 時，計算過程會更快且更高效；而在不使用 Flash Attention 的情況下，則需要手動處理掩碼以確保自迴歸的正確性。
 
-
-##  `⊕` 代表殘差計算
+## `⊕` 代表殘差計算
 
 `⊕` 符號代表殘差連接（Residual Connection）或稱跳躍連接（Skip Connection）的計算。
 
 在圖中可以看到兩個主要的 `⊕` 位置：
+
 1. 最上方的 `⊕`：代表整個注意力模組的殘差連接，將原始輸入與注意力層的輸出相加
 2. 中間的 `⊕`：代表在 mask 操作後的加法運算，用於將 mask 值加到注意力分數上
 
 殘差連接的主要作用是：
+
 1. 幫助解決深層網路的梯度消失問題
 2. 使網路能夠更容易學習恆等映射
 3. 改善深層模型的訓練穩定性

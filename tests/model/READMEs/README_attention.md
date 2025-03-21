@@ -137,6 +137,7 @@ python tests/attention_visualization.py
    - 嘗試添加position embedding，理解位置信息的重要性
 
 3. **可視化注意力權重**：
+
    ```python
    import matplotlib.pyplot as plt
    import seaborn as sns
@@ -166,4 +167,4 @@ python tests/attention_visualization.py
 2. 創建一個測試，展示不同溫度參數如何影響注意力分佈
 3. 對比原始模型的Attention與簡化版SimpleAttention的行為差異
 
-通過這些測試，您可以在不需要完整訓練模型的情況下，深入理解大型語言模型中最核心的Attention機制。 
+通過這些測試，您可以在不需要完整訓練模型的情況下，深入理解大型語言模型中最核心的Attention機制。
