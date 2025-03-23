@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use('Agg')  # 使用無窗口後端
+
 import pytest
 import torch
 import sys
@@ -20,6 +23,10 @@ class TestLoRAVisualization:
         """設置測試環境，確保輸出目錄存在"""
         self.output_dir = Path(__file__).parent / "visualization_output"
         self.output_dir.mkdir(exist_ok=True)
+        
+        # 設置 matplotlib 支援中文
+        plt.rcParams['font.sans-serif'] = ['SimHei']  # 使用黑體字
+        plt.rcParams['axes.unicode_minus'] = False  # 正確顯示負號
     
     def test_visualize_weight_transformation(self):
         """視覺化 LoRA 對權重的轉換效果"""
@@ -99,7 +106,7 @@ class TestLoRAVisualization:
             
             # 顯示
             im = axes[i+1].imshow(combined_weight.numpy(), cmap='coolwarm')
-            axes[i+1].set_title(f'Rank={rank}')
+            axes[i+1].set_title(f'秩={rank}')
             plt.colorbar(im, ax=axes[i+1])
         
         plt.tight_layout()
@@ -188,26 +195,40 @@ class TestLoRAVisualization:
         # 可視化訓練動態
         fig, ax = plt.subplots(figsize=(10, 6))
         
+        # 使用色弱友好的顏色方案和不同的標記
         # 原始數據
-        ax.scatter(X.numpy(), y_true.numpy(), s=10, color='blue', label='原始數據 (sin)')
-        ax.scatter(X.numpy(), y_new.numpy(), s=10, color='red', label='新數據 (cos)')
+        ax.scatter(X.numpy(), y_true.numpy(), s=20, color='#0072B2', marker='o', label='原始數據 (sin)')
+        ax.scatter(X.numpy(), y_new.numpy(), s=20, color='#D55E00', marker='s', label='新數據 (cos)')
         
-        # 預訓練模型預測
-        ax.plot(X.numpy(), pretrained_preds, linewidth=2, color='green', label='預訓練模型')
+        # 預訓練模型預測 - 使用黑色實線而非綠色
+        ax.plot(X.numpy(), pretrained_preds, linewidth=3, color='#000000', linestyle='-', label='預訓練模型')
         
-        # LoRA 不同階段預測
-        colors = ['orange', 'purple', 'brown', 'pink', 'gray', 'cyan']
+        # LoRA 不同階段預測 - 使用不同線型和標記的組合
+        # 色弱友好的顏色方案
+        colors = ['#0072B2', '#56B4E9', '#CC79A7', '#E69F00', '#F0E442', '#009E73']
+        linestyles = ['-', '--', ':', '-.', (0, (3, 1, 1, 1)), (0, (5, 1))]
+        markers = ['o', 's', '^', 'v', 'D', 'x']
+        
         for i, (epoch, preds) in enumerate(zip(epochs, lora_preds_history)):
-            ax.plot(X.numpy(), preds, linewidth=2, color=colors[i], linestyle='--', label=f'LoRA 訓練 {epoch} 輪')
+            ax.plot(X.numpy(), preds, 
+                    linewidth=2, 
+                    color=colors[i], 
+                    linestyle=linestyles[i], 
+                    marker=markers[i],
+                    markevery=20, # 每20個點標記一次，避免太擁擠
+                    markersize=8,
+                    label=f'LoRA 訓練 {epoch} 輪')
         
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_title('LoRA 訓練動態 - 領域適應')
-        ax.legend()
-        ax.grid(True)
+        ax.set_xlabel('X', fontsize=12)
+        ax.set_ylabel('Y', fontsize=12)
+        ax.set_title('LoRA 訓練動態 - 領域適應', fontsize=14)
+        
+        # 增加圖例的可讀性
+        ax.legend(fontsize=10, frameon=True, facecolor='white', edgecolor='black')
+        ax.grid(True, linestyle='--', alpha=0.7)
         
         plt.tight_layout()
-        plt.savefig(str(self.output_dir / "training_dynamics.png"))
+        plt.savefig(str(self.output_dir / "training_dynamics.png"), dpi=300)
         plt.close()
     
     def test_visualize_parameter_efficiency(self):
@@ -241,7 +262,7 @@ class TestLoRAVisualization:
         # 參數數量圖
         ax1.plot(model_sizes, full_params, 'o-', linewidth=2, markersize=8, label='全參數')
         for rank in lora_ranks:
-            ax1.plot(model_sizes, lora_params_by_rank[rank], 'o-', linewidth=2, markersize=8, label=f'LoRA Rank={rank}')
+            ax1.plot(model_sizes, lora_params_by_rank[rank], 'o-', linewidth=2, markersize=8, label=f'LoRA 秩={rank}')
         
         ax1.set_xlabel('模型尺寸')
         ax1.set_ylabel('參數數量')
@@ -252,7 +273,7 @@ class TestLoRAVisualization:
         
         # 參數減少比例圖
         for rank in lora_ranks:
-            ax2.plot(model_sizes, reduction_ratios[rank], 'o-', linewidth=2, markersize=8, label=f'LoRA Rank={rank}')
+            ax2.plot(model_sizes, reduction_ratios[rank], 'o-', linewidth=2, markersize=8, label=f'LoRA 秩={rank}')
         
         ax2.set_xlabel('模型尺寸')
         ax2.set_ylabel('參數減少比例 (全參數/LoRA)')
