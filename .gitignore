@@ -13,6 +13,7 @@ venv/
 /tests/model/minimindblock_visualization/
 /tests/model/moe_gate/
 /tests/model/visualization_output/
+/tests/model_lora/visualization_output/
 
 # 忽略其他不需要的文件
 /dataset
