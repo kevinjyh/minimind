@@ -90,7 +90,6 @@ if input_ids_next.item() == eos_token_id:
       break
 ```
 
-
 ```python
 sorted_logits, sorted_indices = torch.sort(logits, descending=True, dim=-1)
 ```
