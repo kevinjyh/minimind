@@ -40,6 +40,28 @@
    - 測試將 LoRA 應用到模型後的前向傳播
    - 由於 B 矩陣初始化為零，確認初始輸出應與原始模型相同
 
+3. test_apply_lora_to_small_model 測試
+   - 對小型 MiniMindLM 模型應用 LoRA，秩為 8
+   - 首先識別並計數模型中所有符合條件的方陣線性層
+   - 檢查 LoRA 應用後的情況：
+      - 確認所有方陣線性層都應用了 LoRA
+      - 驗證 LoRA 的秩設置正確
+      - 確保前向傳播方法已被修改
+   - 最後執行模型的前向傳播，確保模型仍然能正常工作
+
+4. test_apply_lora_to_moe_model 測試
+   - 對帶有 MoE (Mixture of Experts) 的 MiniMindLM 模型應用 LoRA，秩為 16
+   - 與第一個測試類似，但專門針對 MoE 結構的模型
+   - 驗證在複雜的 MoE 架構中，LoRA 仍能正確應用於所有符合條件的線性層
+   - 確認應用 LoRA 後，MoE 模型的前向傳播功能仍然正常
+
+這兩個測試將幫助您確認 apply_lora 函數能夠正確地疊加低秩層於不同配置的 MiniMindLM 模型中的 nn.Linear 層，並且不會破壞模型的基本功能。
+這些測試案例會：
+
+   1. 識別和統計模型中所有符合條件的方陣線性層
+   2. 確認這些層在應用 LoRA 後被正確修改
+   3. 驗證模型在應用 LoRA 後仍能正常運行
+
 #### TestSaveLoadLoRA 類
 
 1. **test_save_load_lora**：

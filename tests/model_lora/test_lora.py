@@ -5,6 +5,10 @@ import os
 from pathlib import Path
 import tempfile
 
+# 導入需要測試的模型和配置
+from model.model import MiniMindLM
+from model.LMConfig import LMConfig
+
 # 修正：使用 insert(0) 確保優先搜索，並使用 absolute() 確保絕對路徑
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.absolute()))
 
@@ -86,6 +90,47 @@ class TestApplyLoRA:
         
         return SimpleModel()
     
+    @pytest.fixture
+    def small_config(self):
+        """提供一個小型模型配置用於測試"""
+        return LMConfig(
+            dim=128,
+            n_layers=2,
+            n_heads=4,
+            n_kv_heads=2,
+            vocab_size=1000,
+            hidden_dim=256,
+            max_seq_len=128,
+            dropout=0.0
+        )
+    
+    @pytest.fixture
+    def moe_config(self):
+        """提供一個使用 MoE (Mixture of Experts) 的模型配置"""
+        return LMConfig(
+            dim=128,
+            n_layers=2,
+            n_heads=4,
+            n_kv_heads=2,
+            vocab_size=1000,
+            hidden_dim=256,
+            max_seq_len=128,
+            dropout=0.0,
+            use_moe=True,
+            num_experts_per_tok=2,
+            n_routed_experts=4
+        )
+    
+    @pytest.fixture
+    def small_model(self, small_config):
+        """創建一個小型模型實例用於測試"""
+        return MiniMindLM(small_config)
+    
+    @pytest.fixture
+    def moe_model(self, moe_config):
+        """創建一個使用 MoE 的模型實例用於測試"""
+        return MiniMindLM(moe_config)
+    
     def test_apply_lora(self, simple_model):
         """測試 LoRA 應用到模型上"""
         model = simple_model
@@ -107,6 +152,80 @@ class TestApplyLoRA:
         # 確認 forward 方法已被修改
         assert model.linear1.forward != original_forward1
         assert model.linear3.forward != original_forward3
+    
+    def test_apply_lora_to_small_model(self, small_model):
+        """測試 LoRA 應用到 MiniMindLM 小型模型上"""
+        model = small_model
+        
+        # 記錄應用前的一些線性層前向方法
+        linear_layers_before = {}
+        square_linear_count = 0
+        
+        # 識別所有方陣線性層
+        for name, module in model.named_modules():
+            if isinstance(module, torch.nn.Linear) and module.weight.shape[0] == module.weight.shape[1]:
+                linear_layers_before[name] = module.forward
+                square_linear_count += 1
+        
+        # 確保模型中存在方陣線性層
+        assert square_linear_count > 0, "模型中沒有符合條件的方陣線性層"
+        
+        # 應用 LoRA
+        apply_lora(model, rank=8)
+        
+        # 檢查所有方陣線性層是否都被應用了 LoRA
+        lora_applied_count = 0
+        for name, module in model.named_modules():
+            if isinstance(module, torch.nn.Linear) and module.weight.shape[0] == module.weight.shape[1]:
+                assert hasattr(module, 'lora'), f"LoRA 未應用到 {name}"
+                assert module.lora.rank == 8, f"{name} 的 LoRA 秩不正確"
+                assert module.forward != linear_layers_before[name], f"{name} 的前向方法未被修改"
+                lora_applied_count += 1
+        
+        # 確保所有方陣線性層都應用了 LoRA
+        assert lora_applied_count == square_linear_count
+        
+        # 測試模型的前向傳播功能
+        sample_input = torch.randint(0, model.vocab_size, (1, 5))
+        output = model(sample_input)
+        assert output.logits.shape == (1, 5, model.vocab_size)
+    
+    def test_apply_lora_to_moe_model(self, moe_model):
+        """測試 LoRA 應用到使用 MoE 的 MiniMindLM 模型上"""
+        model = moe_model
+        
+        # 記錄應用前的一些線性層前向方法
+        linear_layers_before = {}
+        square_linear_count = 0
+        
+        # 識別所有方陣線性層
+        for name, module in model.named_modules():
+            if isinstance(module, torch.nn.Linear) and module.weight.shape[0] == module.weight.shape[1]:
+                linear_layers_before[name] = module.forward
+                square_linear_count += 1
+        
+        # 確保模型中存在方陣線性層
+        assert square_linear_count > 0, "模型中沒有符合條件的方陣線性層"
+        
+        # 應用 LoRA
+        apply_lora(model, rank=16)
+        
+        # 檢查所有方陣線性層是否都被應用了 LoRA
+        lora_applied_count = 0
+        for name, module in model.named_modules():
+            if isinstance(module, torch.nn.Linear) and module.weight.shape[0] == module.weight.shape[1]:
+                assert hasattr(module, 'lora'), f"LoRA 未應用到 {name}"
+                assert module.lora.rank == 16, f"{name} 的 LoRA 秩不正確"
+                assert module.forward != linear_layers_before[name], f"{name} 的前向方法未被修改"
+                lora_applied_count += 1
+        
+        # 確保所有方陣線性層都應用了 LoRA
+        assert lora_applied_count == square_linear_count
+        
+        # 測試模型的前向傳播功能，確保 MoE 模型仍然可以工作
+        sample_input = torch.randint(0, model.vocab_size, (1, 5))
+        output = model(sample_input)
+        assert output.logits.shape == (1, 5, model.vocab_size)
     
     def test_lora_forward_with_model(self, simple_model):
         """測試應用 LoRA 後模型的前向傳播"""
