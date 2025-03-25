@@ -305,6 +305,9 @@ class TestTrainingLoop:
         mock_optimizer = setup_training_dependencies["optimizer"]
         wrapped_train_epoch = setup_training_dependencies["wrapped_train_epoch"]
         
+        # 修改 accumulation_steps 為 5（因為我們有 5 個批次）
+        setup_training_dependencies["args"].accumulation_steps = 5
+        
         # 調用嵌套的訓練循環
         wrapped_train_epoch(0, None)
         
@@ -329,13 +332,23 @@ class TestTrainingLoop:
         mock_clip_grad_norm = setup_training_dependencies["clip_grad_norm"]
         wrapped_train_epoch = setup_training_dependencies["wrapped_train_epoch"]
         
-        # 設置一個 spy 以確保我們可以捕獲任何調用
-        with patch('torch.nn.utils.clip_grad_norm_', wraps=mock_clip_grad_norm) as clip_spy:
+        # 修改 accumulation_steps 為 5
+        setup_training_dependencies["args"].accumulation_steps = 5
+        
+        # 修改：直接替換 torch.nn.utils 中的函數
+        original_clip_grad_norm = torch.nn.utils.clip_grad_norm_
+        torch.nn.utils.clip_grad_norm_ = mock_clip_grad_norm
+        
+        try:
             # 調用嵌套的訓練循環
             wrapped_train_epoch(0, None)
             
             # 檢查梯度裁剪是否被調用
-            assert clip_spy.called, "梯度裁剪應當被調用"
+            assert mock_clip_grad_norm.called, "梯度裁剪應當被調用"
+        
+        finally:
+            # 恢復原始函數
+            torch.nn.utils.clip_grad_norm_ = original_clip_grad_norm
         
         # 記錄調用信息
         with open(os.path.join(self.output_dir, "gradient_clipping.txt"), "w", encoding="utf-8") as f:

@@ -1,4 +1,4 @@
-數據檔案: C:\Users\user\AppData\Local\Temp\tmpierz2_dq.jsonl
+數據檔案: C:\Users\user\AppData\Local\Temp\tmpfoku2xoh.jsonl
 樣本數量: 3
 平均文本長度: 333.33 字元
 最大文本長度: 500 字元
