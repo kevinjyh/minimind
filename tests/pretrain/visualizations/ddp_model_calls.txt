@@ -1,3 +1,0 @@
-DDP 模型包裝調用:
-DistributedDataParallel 調用參數: model=<MagicMock id='2537191071024'>, device_ids=[0]
-忽略的參數: _ddp_params_and_buffers_to_ignore={'pos_cis'}

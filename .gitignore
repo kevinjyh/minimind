@@ -14,6 +14,7 @@ venv/
 /tests/model/moe_gate/
 /tests/model/visualization_output/
 /tests/model_lora/visualization_output/
+/tests/pretrain/visualizations/
 
 # 忽略其他不需要的文件
 /dataset
