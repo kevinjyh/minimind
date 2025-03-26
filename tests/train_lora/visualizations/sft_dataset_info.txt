@@ -1,0 +1,4 @@
+SFT 數據集初始化成功
+數據源路徑: C:\Users\user\AppData\Local\Temp\tmpa7wok0pf.jsonl
+樣本數量: 3
+最大序列長度: 512

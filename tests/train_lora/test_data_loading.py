@@ -31,9 +31,9 @@ class TestLoRADataLoading:
         
         # 創建假測試數據 (LoRA 數據的特殊格式)
         test_data = [
-            {"prompt": "我是個AI助手", "completion": "我是一個專為身分認同而設計的AI助手。" * 5},
-            {"prompt": "簡單介紹下你自己", "completion": "我是一個專注於身分認同領域的AI助手。" * 3},
-            {"prompt": "你是誰", "completion": "我是一個協助用戶處理身分認同問題的AI助手。" * 2}
+            {"conversations": [{"role": "user", "content": "我是個AI助手"}, {"role": "assistant", "content": "我是一個專為身分認同而設計的AI助手。" * 5}]},
+            {"conversations": [{"role": "user", "content": "簡單介紹下你自己"}, {"role": "assistant", "content": "我是一個專注於身分認同領域的AI助手。" * 3}]},
+            {"conversations": [{"role": "user", "content": "你是誰"}, {"role": "assistant", "content": "我是一個協助用戶處理身分認同問題的AI助手。" * 2}]}
         ]
         
         # 寫入測試數據
@@ -64,18 +64,24 @@ class TestLoRADataLoading:
         mock_tokenizer_instance.bos_token = "<s>"
         mock_tokenizer_instance.eos_token = "</s>"
         mock_tokenizer_instance.pad_token_id = 0
+        mock_tokenizer_instance.bos_id = [1, 2, 3]  # 模擬 bos_id
+        mock_tokenizer_instance.eos_id = [4, 5, 6]  # 模擬 eos_id
         
-        # 創建一個模擬的編碼結果
-        encoding_mock = MagicMock()
-        # 創建一個實際的張量，確保 squeeze 操作返回張量
-        encoding_mock.input_ids = torch.ones((1, self.max_length), dtype=torch.long)
+        # 模擬 apply_chat_template 方法
+        mock_tokenizer_instance.apply_chat_template = MagicMock(return_value="模擬的聊天模板輸出")
         
-        # 設置 tokenizer __call__ 方法返回編碼對象
-        mock_tokenizer_instance.return_value = encoding_mock
+        # 關鍵修改: 創建一個返回 list 而非 tensor 的模擬 __call__ 函數
+        def mock_call(*args, **kwargs):
+            result = MagicMock()
+            # 重要: 返回一個普通 list 而不是 tensor
+            result.input_ids = [1, 2, 3, 4, 5] * 20  # 創建長度為 100 的 list
+            return result
+        
+        mock_tokenizer_instance.__call__ = mock_call
         
         # 初始化數據集
         dataset = SFTDataset(
-            data_path=self.temp_data_file.name,
+            jsonl_path=self.temp_data_file.name,
             tokenizer=mock_tokenizer_instance,
             max_length=self.max_length
         )
@@ -112,34 +118,24 @@ class TestLoRADataLoading:
         mock_tokenizer_instance.bos_token = "<s>"
         mock_tokenizer_instance.eos_token = "</s>"
         mock_tokenizer_instance.pad_token_id = 0
+        mock_tokenizer_instance.bos_id = [1, 2, 3]  # 模擬 bos_id
+        mock_tokenizer_instance.eos_id = [4, 5, 6]  # 模擬 eos_id
         
-        # 創建一個模擬的編碼結果，模擬 prompt 和 completion 的結合
-        def mock_encode(*args, **kwargs):
-            text = args[0] if args else kwargs.get('text', '')
-            # 簡單實現：根據輸入文本不同返回不同長度的編碼
-            if "我是個AI助手" in text:  # prompt
-                return torch.ones(50, dtype=torch.long)
-            else:  # 完整文本 (prompt + completion)
-                return torch.ones(150, dtype=torch.long)
+        # 設置 apply_chat_template 方法
+        mock_tokenizer_instance.apply_chat_template = MagicMock(return_value="模擬的聊天模板輸出")
         
-        # 設置 tokenizer.encode 方法
-        mock_tokenizer_instance.encode = mock_encode
-        
-        # 設置 tokenizer __call__ 方法返回不同的編碼結果
+        # 創建一個模擬的編碼結果，返回 list 而非 tensor
         def mock_call(*args, **kwargs):
-            text = args[0] if args else kwargs.get('text', '')
             result = MagicMock()
-            if "我是個AI助手" in text and "我是一個專為身分認同而設計的AI助手" not in text:  # 只有 prompt
-                result.input_ids = torch.ones((1, 50), dtype=torch.long)
-            else:  # 完整文本或 completion
-                result.input_ids = torch.ones((1, 150), dtype=torch.long)
+            # 重要: 返回一個普通 list 而不是 tensor
+            result.input_ids = [1, 2, 3, 4, 5] * 30  # 創建長度為 150 的 list
             return result
         
         mock_tokenizer_instance.__call__ = mock_call
         
         # 初始化數據集
         dataset = SFTDataset(
-            data_path=self.temp_data_file.name,
+            jsonl_path=self.temp_data_file.name,
             tokenizer=mock_tokenizer_instance,
             max_length=self.max_length
         )
@@ -165,8 +161,10 @@ class TestLoRADataLoading:
                         break
                     item = json.loads(line)
                     f.write(f"樣本 {i+1}:\n")
-                    f.write(f"  Prompt: {item['prompt'][:50]}{'...' if len(item['prompt']) > 50 else ''}\n")
-                    f.write(f"  Completion: {item['completion'][:50]}{'...' if len(item['completion']) > 50 else ''}\n\n")
+                    user_msg = item['conversations'][0]['content']
+                    assistant_msg = item['conversations'][1]['content']
+                    f.write(f"  User: {user_msg[:50]}{'...' if len(user_msg) > 50 else ''}\n")
+                    f.write(f"  Assistant: {assistant_msg[:50]}{'...' if len(assistant_msg) > 50 else ''}\n\n")
     
     @patch("transformers.AutoTokenizer")
     def test_lora_identity_dataset(self, mock_tokenizer):
@@ -176,9 +174,9 @@ class TestLoRADataLoading:
         
         # 身分認同對話樣本
         identity_data = [
-            {"prompt": "你是誰", "completion": "我是一個專為身分認同而設計的AI助手。"},
-            {"prompt": "介紹下你自己", "completion": "我是一個可以協助用戶處理身分認同問題的AI助手。"},
-            {"prompt": "你有什麼價值觀", "completion": "作為一個身分認同助手，我重視多元性、包容性和尊重每個人的獨特性。"}
+            {"conversations": [{"role": "user", "content": "你是誰"}, {"role": "assistant", "content": "我是一個專為身分認同而設計的AI助手。"}]},
+            {"conversations": [{"role": "user", "content": "介紹下你自己"}, {"role": "assistant", "content": "我是一個可以協助用戶處理身分認同問題的AI助手。"}]},
+            {"conversations": [{"role": "user", "content": "你有什麼價值觀"}, {"role": "assistant", "content": "作為一個身分認同助手，我重視多元性、包容性和尊重每個人的獨特性。"}]}
         ]
         
         # 寫入測試數據
@@ -194,17 +192,24 @@ class TestLoRADataLoading:
         mock_tokenizer_instance.bos_token = "<s>"
         mock_tokenizer_instance.eos_token = "</s>"
         mock_tokenizer_instance.pad_token_id = 0
+        mock_tokenizer_instance.bos_id = [1, 2, 3]  # 模擬 bos_id
+        mock_tokenizer_instance.eos_id = [4, 5, 6]  # 模擬 eos_id
         
-        # 創建一個模擬的編碼結果
-        encoding_mock = MagicMock()
-        encoding_mock.input_ids = torch.ones((1, self.max_length), dtype=torch.long)
+        # 設置 apply_chat_template 方法
+        mock_tokenizer_instance.apply_chat_template = MagicMock(return_value="模擬的聊天模板輸出")
         
-        # 設置 tokenizer __call__ 方法返回編碼對象
-        mock_tokenizer_instance.return_value = encoding_mock
+        # 創建一個模擬的編碼結果，返回 list 而非 tensor
+        def mock_call(*args, **kwargs):
+            result = MagicMock()
+            # 重要: 返回一個普通 list 而不是 tensor
+            result.input_ids = [1, 2, 3, 4, 5] * 20  # 創建長度為 100 的 list
+            return result
+        
+        mock_tokenizer_instance.__call__ = mock_call
         
         # 初始化數據集
         dataset = SFTDataset(
-            data_path=identity_data_file.name,
+            jsonl_path=identity_data_file.name,
             tokenizer=mock_tokenizer_instance,
             max_length=self.max_length
         )
@@ -217,23 +222,23 @@ class TestLoRADataLoading:
             f.write("LoRA 身分認同數據集分析\n\n")
             
             # 計算與寫入統計信息
-            prompts = []
-            completions = []
+            user_prompts = []
+            assistant_responses = []
             with open(identity_data_file.name, 'r', encoding='utf-8') as data_file:
                 for line in data_file:
                     item = json.loads(line)
-                    prompts.append(item['prompt'])
-                    completions.append(item['completion'])
+                    user_prompts.append(item['conversations'][0]['content'])
+                    assistant_responses.append(item['conversations'][1]['content'])
             
-            avg_prompt_len = sum(len(p) for p in prompts) / len(prompts) if prompts else 0
-            avg_completion_len = sum(len(c) for c in completions) / len(completions) if completions else 0
+            avg_prompt_len = sum(len(p) for p in user_prompts) / len(user_prompts) if user_prompts else 0
+            avg_response_len = sum(len(c) for c in assistant_responses) / len(assistant_responses) if assistant_responses else 0
             
             f.write(f"樣本數量: {len(identity_data)}\n")
             f.write(f"平均提示長度: {avg_prompt_len:.2f} 字符\n")
-            f.write(f"平均回覆長度: {avg_completion_len:.2f} 字符\n\n")
+            f.write(f"平均回覆長度: {avg_response_len:.2f} 字符\n\n")
             
             f.write("身分認同提示詞類型分析:\n")
-            for prompt in prompts:
+            for prompt in user_prompts:
                 if "是誰" in prompt or "介紹" in prompt:
                     f.write(f"- 自我介紹類: {prompt}\n")
                 elif "價值觀" in prompt or "原則" in prompt:
@@ -260,17 +265,24 @@ class TestLoRADataLoading:
         mock_tokenizer_instance.bos_token = "<s>"
         mock_tokenizer_instance.eos_token = "</s>"
         mock_tokenizer_instance.pad_token_id = 0
+        mock_tokenizer_instance.bos_id = [1, 2, 3]  # 模擬 bos_id
+        mock_tokenizer_instance.eos_id = [4, 5, 6]  # 模擬 eos_id
         
-        # 創建一個模擬的編碼結果
-        encoding_mock = MagicMock()
-        encoding_mock.input_ids = torch.ones((1, self.max_length), dtype=torch.long)
+        # 設置 apply_chat_template 方法
+        mock_tokenizer_instance.apply_chat_template = MagicMock(return_value="模擬的聊天模板輸出")
         
-        # 設置 tokenizer __call__ 方法返回編碼對象
-        mock_tokenizer_instance.return_value = encoding_mock
+        # 創建一個模擬的編碼結果，返回 list 而非 tensor
+        def mock_call(*args, **kwargs):
+            result = MagicMock()
+            # 重要: 返回一個普通 list 而不是 tensor
+            result.input_ids = [1, 2, 3, 4, 5] * 20  # 創建長度為 100 的 list
+            return result
+        
+        mock_tokenizer_instance.__call__ = mock_call
         
         # 初始化數據集
         dataset = SFTDataset(
-            data_path=self.temp_data_file.name,
+            jsonl_path=self.temp_data_file.name,
             tokenizer=mock_tokenizer_instance,
             max_length=self.max_length
         )
