@@ -1,0 +1,2 @@
+save_lora 被調用了 1 次
+調用 1 - 模型: <MagicMock id='1663882546112'>, 保存路徑: C:\gDrive\gRepos\minimind\tests\train_lora\visualizations\checkpoints/lora/test_lora_512.pth

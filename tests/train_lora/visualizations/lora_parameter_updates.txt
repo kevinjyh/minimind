@@ -1,0 +1,12 @@
+LoRA 參數更新分析
+
+參數requires_grad設置:
+- layer.0.weight: False
+- layer.0.lora.A.weight: True
+- layer.0.lora.B.weight: True
+
+LoRA架構說明:
+1. LoRA是一種參數有效的微調方法，僅更新低秩適應矩陣而非所有模型權重
+2. LoRA參數通常包含A和B兩個權重矩陣，構成Y = X + BA(X)的形式
+3. 在正向傳播中，原始權重和LoRA權重的輸出相加形成最終結果
+4. 通過只更新LoRA參數，可以將可訓練參數減少到原模型的約1%

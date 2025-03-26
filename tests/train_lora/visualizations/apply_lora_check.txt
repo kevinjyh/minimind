@@ -1,0 +1,22 @@
+LoRA 應用測試成功
+原始模型參數數量: 25829888
+LoRA 參數數量: 262144
+LoRA 參數佔比: 1.014886%
+
+添加了 LoRA 的層:
+- layers.0.attention.wq: 輸入大小=512, 輸出大小=512
+- layers.0.attention.wo: 輸入大小=512, 輸出大小=512
+- layers.1.attention.wq: 輸入大小=512, 輸出大小=512
+- layers.1.attention.wo: 輸入大小=512, 輸出大小=512
+- layers.2.attention.wq: 輸入大小=512, 輸出大小=512
+- layers.2.attention.wo: 輸入大小=512, 輸出大小=512
+- layers.3.attention.wq: 輸入大小=512, 輸出大小=512
+- layers.3.attention.wo: 輸入大小=512, 輸出大小=512
+- layers.4.attention.wq: 輸入大小=512, 輸出大小=512
+- layers.4.attention.wo: 輸入大小=512, 輸出大小=512
+- layers.5.attention.wq: 輸入大小=512, 輸出大小=512
+- layers.5.attention.wo: 輸入大小=512, 輸出大小=512
+- layers.6.attention.wq: 輸入大小=512, 輸出大小=512
+- layers.6.attention.wo: 輸入大小=512, 輸出大小=512
+- layers.7.attention.wq: 輸入大小=512, 輸出大小=512
+- layers.7.attention.wo: 輸入大小=512, 輸出大小=512

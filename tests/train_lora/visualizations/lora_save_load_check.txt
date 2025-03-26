@@ -1,0 +1,53 @@
+LoRA 保存和加載測試成功
+權重檔案路徑: C:\gDrive\gRepos\minimind\tests\train_lora\visualizations/temp_lora.pth
+檔案大小: 1034.00 KB
+
+加載後的 LoRA 權重統計:
+- layers.0.attention.wq: 
+  A 均值: -6.478794966824353e-05
+  B 均值: 0.0
+- layers.0.attention.wo: 
+  A 均值: 0.00022625623387284577
+  B 均值: 0.0
+- layers.1.attention.wq: 
+  A 均值: -0.0003879530413541943
+  B 均值: 0.0
+- layers.1.attention.wo: 
+  A 均值: 0.00020177848637104034
+  B 均值: 0.0
+- layers.2.attention.wq: 
+  A 均值: -2.701963239815086e-06
+  B 均值: 0.0
+- layers.2.attention.wo: 
+  A 均值: -7.71777267800644e-05
+  B 均值: 0.0
+- layers.3.attention.wq: 
+  A 均值: -9.16550779948011e-05
+  B 均值: 0.0
+- layers.3.attention.wo: 
+  A 均值: 0.0002694872673600912
+  B 均值: 0.0
+- layers.4.attention.wq: 
+  A 均值: -0.000123942008940503
+  B 均值: 0.0
+- layers.4.attention.wo: 
+  A 均值: 0.00048224808415398
+  B 均值: 0.0
+- layers.5.attention.wq: 
+  A 均值: 0.00018031668150797486
+  B 均值: 0.0
+- layers.5.attention.wo: 
+  A 均值: -3.9797316276235506e-05
+  B 均值: 0.0
+- layers.6.attention.wq: 
+  A 均值: -6.919413135619834e-05
+  B 均值: 0.0
+- layers.6.attention.wo: 
+  A 均值: 0.00014691099931951612
+  B 均值: 0.0
+- layers.7.attention.wq: 
+  A 均值: -0.00019377337594050914
+  B 均值: 0.0
+- layers.7.attention.wo: 
+  A 均值: -0.00019788013014476746
+  B 均值: 0.0

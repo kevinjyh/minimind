@@ -1,0 +1,38 @@
+LoRA 應用於模型的分析
+
+模型總參數量: 506176
+LoRA 參數量: 2048
+LoRA 參數佔比: 0.40%
+
+按層類型統計應用 LoRA 的數量:
+  attention: 4 層
+
+應用 LoRA 的層詳細信息:
+層: layers.0.attention.wq
+  原始形狀: torch.Size([64, 64])
+  LoRA A 形狀: torch.Size([4, 64])
+  LoRA B 形狀: torch.Size([64, 4])
+  LoRA 參數數量: 512
+
+層: layers.0.attention.wo
+  原始形狀: torch.Size([64, 64])
+  LoRA A 形狀: torch.Size([4, 64])
+  LoRA B 形狀: torch.Size([64, 4])
+  LoRA 參數數量: 512
+
+層: layers.1.attention.wq
+  原始形狀: torch.Size([64, 64])
+  LoRA A 形狀: torch.Size([4, 64])
+  LoRA B 形狀: torch.Size([64, 4])
+  LoRA 參數數量: 512
+
+層: layers.1.attention.wo
+  原始形狀: torch.Size([64, 64])
+  LoRA A 形狀: torch.Size([4, 64])
+  LoRA B 形狀: torch.Size([64, 4])
+  LoRA 參數數量: 512
+
+LoRA 應用策略:
+1. LoRA 僅應用於方陣類型的線性層 (輸入維度 = 輸出維度)
+2. 這種選擇性應用可以減少參數量，同時保持關鍵層的可塑性
+3. 每個應用了 LoRA 的層，在前向傳播時會計算: output = original(x) + lora(x)
