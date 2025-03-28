@@ -15,6 +15,7 @@ venv/
 /tests/model/visualization_output/
 /tests/model_lora/visualization_output/
 /tests/pretrain/visualizations/
+/tests/train_lora/visualizations/
 
 # 忽略其他不需要的文件
 /dataset
