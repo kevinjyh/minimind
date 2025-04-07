@@ -40,11 +40,12 @@ def logits_to_probs(logits, labels):
     return probs
 
 
-def dpo_loss(ref_probs, probs, beta):
+def dpo_loss(ref_probs, probs, mask, beta):
     # ref_probs 和 probs 都是 shape: (batch_size, seq_len)
-    # 计算每个样本的平均概率
-    ref_probs = ref_probs.mean(dim=1)
-    probs = probs.mean(dim=1)
+    # https://github.com/jingyaogong/minimind/issues/298
+    seq_lengths = mask.sum(dim=1, keepdim=True)  # (batch_size, 1)
+    ref_probs = (ref_probs * mask).sum(dim=1) / seq_lengths.squeeze()
+    probs = (probs * mask).sum(dim=1) / seq_lengths.squeeze()
 
     # 将 chosen 和 rejected 数据分开
     batch_size = ref_probs.shape[0]
@@ -87,7 +88,7 @@ def train_epoch(epoch, wandb):
             logits = outputs.logits
             probs = logits_to_probs(logits, y)
             probs = probs * mask
-            loss = dpo_loss(ref_probs, probs, beta=0.1)
+            loss = dpo_loss(ref_probs, probs, mask, beta=0.1)
             loss = loss / args.accumulation_steps
 
         scaler.scale(loss).backward()
@@ -183,7 +184,7 @@ if __name__ == "__main__":
     parser.add_argument('--local_rank', type=int, default=-1)
     parser.add_argument('--dim', default=512, type=int)
     parser.add_argument('--n_layers', default=8, type=int)
-    parser.add_argument('--max_seq_len', default=3000, type=int)
+    parser.add_argument('--max_seq_len', default=1024, type=int)
     parser.add_argument('--use_moe', default=False, type=bool)
     parser.add_argument("--data_path", type=str, default="./dataset/dpo.jsonl")
 
@@ -194,7 +195,6 @@ if __name__ == "__main__":
     os.makedirs(args.save_dir, exist_ok=True)
     os.makedirs(args.out_dir, exist_ok=True)
     tokens_per_iter = args.batch_size * lm_config.max_seq_len
-    torch.manual_seed(1337)
     device_type = "cuda" if "cuda" in args.device else "cpu"
 
     args.wandb_run_name = f"MiniMind-Full-DPO-Epoch-{args.epochs}-BatchSize-{args.batch_size}-LearningRate-{args.learning_rate}"
@@ -202,9 +202,17 @@ if __name__ == "__main__":
     ctx = nullcontext() if device_type == "cpu" else torch.cuda.amp.autocast()
     ddp = int(os.environ.get("RANK", -1)) != -1  # is this a ddp run?
     ddp_local_rank, DEVICE = 0, "cuda:0"
+    base_seed = 1337
+    torch.manual_seed(base_seed)
+    torch.cuda.manual_seed(base_seed)
+
     if ddp:
         init_distributed_mode()
         args.device = torch.device(DEVICE)
+        rank = dist.get_rank()
+        torch.manual_seed(base_seed + rank)
+        # 同时设置 CUDA 的随机种子
+        torch.cuda.manual_seed(base_seed + rank)
 
     if args.use_wandb and (not ddp or ddp_local_rank == 0):
         import wandb
